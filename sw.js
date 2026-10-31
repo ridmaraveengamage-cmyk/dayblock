@@ -1,6 +1,6 @@
 // Offline support: try the network first, fall back to the cached copy.
-const CACHE = 'dayblock-v3';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './auth.js', './firebase-config.js', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'dayblock-v4';
+const ASSETS = ['./', './index.html', './styles.css?v=4', './app.js?v=4', './auth.js?v=4', './firebase-config.js', './manifest.webmanifest', './icon.svg'];
 const CACHEABLE_HOSTS = [self.location.host, 'www.gstatic.com']; // app files + Firebase SDK scripts
 
 self.addEventListener('install', e => {
@@ -17,8 +17,10 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || !CACHEABLE_HOSTS.includes(url.host)) return;
+  // Own files: always check with the server (skips the browser's 10-minute cache) so updates show at once.
+  const fresh = url.host === self.location.host ? fetch(req, { cache: 'no-cache' }) : fetch(req);
   e.respondWith(
-    fetch(req)
+    fresh
       .then(res => {
         if (res.ok) {
           const copy = res.clone();

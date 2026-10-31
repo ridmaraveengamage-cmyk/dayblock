@@ -1,5 +1,5 @@
 // Offline support: try the network first, fall back to the cached copy.
-const CACHE = 'dayblock-v2';
+const CACHE = 'dayblock-v3';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './auth.js', './firebase-config.js', './manifest.webmanifest', './icon.svg'];
 const CACHEABLE_HOSTS = [self.location.host, 'www.gstatic.com']; // app files + Firebase SDK scripts
 

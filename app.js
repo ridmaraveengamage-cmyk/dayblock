@@ -159,10 +159,15 @@
   }
 
   // ---------- State & storage ----------
-  const defaultSettings = { mode: 'timeblock', tbView: 'day', todoView: 'list', insView: 'week', dayStart: 6, dayEnd: 23, weekStart: 1, theme: 'auto' };
+  const defaultSettings = { mode: 'timeblock', tbView: 'day', todoView: 'list', insView: 'week', dayStart: 0, dayEnd: 24, weekStart: 1, theme: 'auto', fullDay: true };
 
   function normalize(d) {
     const s = { ...defaultSettings, ...(d && typeof d.settings === 'object' ? d.settings : {}) };
+    // Older versions defaulted to 6 AM–11 PM; move anyone still on that default to the full 24 hours once.
+    if (!d?.settings?.fullDay) {
+      if (+s.dayStart === 6 && +s.dayEnd === 23) { s.dayStart = 0; s.dayEnd = 24; }
+      s.fullDay = true;
+    }
     s.dayStart = clamp(parseInt(s.dayStart, 10) || 0, 0, 23);
     s.dayEnd = clamp(parseInt(s.dayEnd, 10) || 24, s.dayStart + 1, 24);
     s.weekStart = Number(s.weekStart) === 0 ? 0 : 1;

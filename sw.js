@@ -1,6 +1,6 @@
-﻿// Offline support: try the network first, fall back to the cached copy.
-const CACHE = 'dayblock-v5';
-const ASSETS = ['./', './index.html', './styles.css?v=5', './app.js?v=5', './auth.js?v=5', './firebase-config.js?v=5', './manifest.webmanifest', './icon.svg'];
+// Offline support: try the network first, fall back to the cached copy.
+const CACHE = 'dayblock-v6';
+const ASSETS = ['./', './index.html', './styles.css?v=6', './app.js?v=6', './auth.js?v=6', './firebase-config.js?v=6', './manifest.webmanifest', './icon.svg'];
 const CACHEABLE_HOSTS = [self.location.host, 'www.gstatic.com']; // app files + Firebase SDK scripts
 
 self.addEventListener('install', e => {

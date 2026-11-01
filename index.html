@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body data-auth="loading">
   <!-- ============ Sign in / sign up ============ -->
@@ -22,7 +22,7 @@
         <h1>Dayblock</h1>
         <p>Plan your days with time blocks and to-dos, and see where your time really goes.</p>
       </div>
-      <div class="auth-loading" id="auth-loading"><span class="spinner" aria-hidden="true"></span>Loadingâ€¦</div>
+      <div class="auth-loading" id="auth-loading"><span class="spinner" aria-hidden="true"></span>Loading…</div>
       <div class="auth-forms" id="auth-forms">
         <button type="button" class="btn google-btn" id="google-btn">
           <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
@@ -68,10 +68,10 @@
     <!-- Shared toolbar: date navigation + Day / Week / Month -->
     <div class="toolbar">
       <div class="nav-group">
-        <button type="button" class="icon-btn" id="prev-btn" aria-label="Previous" title="Previous (â†)">
+        <button type="button" class="icon-btn" id="prev-btn" aria-label="Previous" title="Previous (←)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </button>
-        <button type="button" class="icon-btn" id="next-btn" aria-label="Next" title="Next (â†’)">
+        <button type="button" class="icon-btn" id="next-btn" aria-label="Next" title="Next (→)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </button>
         <button type="button" class="period-label" id="period-label" title="Pick a date">
@@ -94,7 +94,7 @@
           <div class="card">
             <div class="card-head"><h2>Tasks to schedule</h2></div>
             <form id="quick-task" class="quick-task" autocomplete="off">
-              <input type="text" id="quick-task-input" placeholder="Add a taskâ€¦" maxlength="200" aria-label="New task">
+              <input type="text" id="quick-task-input" placeholder="Add a task…" maxlength="200" aria-label="New task">
               <button type="submit" class="btn">Add</button>
             </form>
             <ul id="unscheduled" class="mini-tasks"></ul>
@@ -174,7 +174,7 @@
         </button>
       </header>
       <label class="field"><span>What</span>
-        <input type="text" id="b-title" maxlength="120" placeholder="Deep work, gym, emailsâ€¦" autocomplete="off">
+        <input type="text" id="b-title" maxlength="120" placeholder="Deep work, gym, emails…" autocomplete="off">
       </label>
       <div class="field-row">
         <label class="field"><span>Date</span><input type="date" id="b-date"></label>
@@ -247,7 +247,7 @@
         <label class="field"><span>Time frame</span><select id="g-horizon"></select></label>
         <label class="field"><span>Target date</span><input type="date" id="g-target"></label>
       </div>
-      <label class="field"><span>Why does this matter to you?</span><textarea id="g-why" rows="3" placeholder="When I achieve this, I will feelâ€¦"></textarea></label>
+      <label class="field"><span>Why does this matter to you?</span><textarea id="g-why" rows="3" placeholder="When I achieve this, I will feel…"></textarea></label>
       <p class="form-error" id="g-error" hidden></p>
       <footer class="dialog-foot">
         <button type="button" class="btn danger" id="g-delete">Delete</button>
@@ -311,14 +311,14 @@
         <h3>App</h3>
         <button type="button" class="btn primary" id="install-btn">Install Dayblock as an app</button>
       </section>
-      <p class="muted small">Shortcuts: <kbd>N</kbd> new Â· <kbd>â†</kbd> <kbd>â†’</kbd> move Â· <kbd>T</kbd> today Â· <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> day / week / month</p>
+      <p class="muted small">Shortcuts: <kbd>N</kbd> new · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>T</kbd> today · <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> day / week / month</p>
     </div>
   </dialog>
 
   <div id="tooltip" class="chart-tip" role="tooltip" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=5"></script>
-  <script type="module" src="auth.js?v=5"></script>
+  <script src="app.js?v=6"></script>
+  <script type="module" src="auth.js?v=6"></script>
 </body>
 </html>

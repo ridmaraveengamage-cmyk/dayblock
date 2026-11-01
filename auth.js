@@ -1,6 +1,6 @@
 // Sign-in (Google + email/password) and cloud sync via Firebase.
 // Without a Firebase config the app runs in "this device only" mode.
-import { firebaseConfig } from './firebase-config.js?v=5';
+import { firebaseConfig } from './firebase-config.js?v=6';
 
 const App = window.DayblockApp;
 const FB_VERSION = '10.12.2';

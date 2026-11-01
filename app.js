@@ -24,7 +24,23 @@
     timeblock: [['day', 'Day'], ['week', 'Week'], ['month', 'Month']],
     todo: [['list', 'List'], ['day', 'Day'], ['week', 'Week'], ['month', 'Month']],
     insights: [['day', 'Day'], ['week', 'Week'], ['month', 'Month']],
+    vision: [['board', 'Vision'], ['goals', 'Goals'], ['journal', 'Journal']],
   };
+  const LIST_VIEWS = ['list', 'board', 'goals']; // views without date navigation
+  const LIFE_AREAS = [
+    { id: 'health', name: 'Health', emoji: '💪', cat: 'health' },
+    { id: 'career', name: 'Career', emoji: '💼', cat: 'work' },
+    { id: 'money', name: 'Money', emoji: '💰', cat: 'learning' },
+    { id: 'love', name: 'Love', emoji: '❤️', cat: 'personal' },
+    { id: 'family', name: 'Family & friends', emoji: '🤝', cat: 'break' },
+    { id: 'growth', name: 'Growth', emoji: '🌱', cat: 'health' },
+    { id: 'fun', name: 'Fun', emoji: '🎉', cat: 'personal' },
+    { id: 'purpose', name: 'Purpose', emoji: '✨', cat: 'other' },
+  ];
+  const AREA_IDS = LIFE_AREAS.map(a => a.id);
+  const areaOf = id => LIFE_AREAS.find(a => a.id === id) || LIFE_AREAS[5];
+  const HORIZONS = [['life', 'Lifetime'], ['5y', 'In 5 years'], ['year', 'This year'], ['quarter', 'Next 90 days']];
+  const MOODS = [['😞', 'Rough'], ['😕', 'Low'], ['😐', 'Okay'], ['🙂', 'Good'], ['😄', 'Great']];
   const svg = (inner, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
   const ICON = {
     calendar: svg('<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v4M10 16h4"/>'),
@@ -34,6 +50,7 @@
     pause: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4.5" height="16" rx="1.2"/><rect x="13.5" y="4" width="4.5" height="16" rx="1.2"/></svg>',
     repeat: svg('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
     clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    pencil: svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
   };
 
   // ---------- Helpers ----------
@@ -159,7 +176,47 @@
   }
 
   // ---------- State & storage ----------
-  const defaultSettings = { mode: 'timeblock', tbView: 'day', todoView: 'list', insView: 'week', dayStart: 0, dayEnd: 24, weekStart: 1, theme: 'auto', fullDay: true };
+  const defaultSettings = { mode: 'timeblock', tbView: 'day', todoView: 'list', insView: 'week', visView: 'board', dayStart: 0, dayEnd: 24, weekStart: 1, theme: 'auto', fullDay: true };
+
+  function normalizeVision(v) {
+    v = v && typeof v === 'object' ? v : {};
+    const arr = x => (Array.isArray(x) ? x : []);
+    const journal = {};
+    if (v.journal && typeof v.journal === 'object') {
+      for (const [date, j] of Object.entries(v.journal)) {
+        if (!isISO(date) || !j || typeof j !== 'object') continue;
+        journal[date] = {
+          mood: Number.isInteger(j.mood) && j.mood >= 0 && j.mood < MOODS.length ? j.mood : null,
+          gratitude: [0, 1, 2].map(i => String(arr(j.gratitude)[i] || '')),
+          intention: String(j.intention || ''),
+          script: String(j.script || ''),
+          notes: String(j.notes || ''),
+        };
+      }
+    }
+    return {
+      statement: String(v.statement || ''),
+      affirmations: arr(v.affirmations).filter(a => a && a.id && typeof a.text === 'string'),
+      board: arr(v.board).filter(t => t && t.id && typeof t.text === 'string')
+        .map(t => ({ id: t.id, text: t.text, emoji: String(t.emoji || '✨'), area: AREA_IDS.includes(t.area) ? t.area : 'purpose' })),
+      areas: Object.fromEntries(LIFE_AREAS.map(a => [a.id, clamp(parseInt(v.areas?.[a.id], 10) || 5, 1, 10)])),
+      goals: arr(v.goals).filter(g => g && g.id && typeof g.title === 'string').map(g => ({
+        id: g.id,
+        title: g.title,
+        area: AREA_IDS.includes(g.area) ? g.area : 'growth',
+        horizon: HORIZONS.some(h => h[0] === g.horizon) ? g.horizon : 'year',
+        target: isISO(g.target) ? g.target : '',
+        why: String(g.why || ''),
+        status: g.status === 'done' ? 'done' : 'active',
+        created: Number(g.created) || Date.now(),
+        doneAt: Number(g.doneAt) || null,
+        milestones: arr(g.milestones).filter(m => m && m.id).map(m => ({
+          id: m.id, title: String(m.title || ''), done: !!m.done, taskId: typeof m.taskId === 'string' ? m.taskId : undefined,
+        })),
+      })),
+      journal,
+    };
+  }
 
   function normalize(d) {
     const s = { ...defaultSettings, ...(d && typeof d.settings === 'object' ? d.settings : {}) };
@@ -175,6 +232,7 @@
     if (!VIEWS.timeblock.some(v => v[0] === s.tbView)) s.tbView = 'day';
     if (!VIEWS.todo.some(v => v[0] === s.todoView)) s.todoView = 'list';
     if (!VIEWS.insights.some(v => v[0] === s.insView)) s.insView = 'week';
+    if (!VIEWS.vision.some(v => v[0] === s.visView)) s.visView = 'board';
     if (!['auto', 'light', 'dark'].includes(s.theme)) s.theme = 'auto';
 
     const blocks = (Array.isArray(d?.blocks) ? d.blocks : [])
@@ -214,7 +272,7 @@
     else if (timer.status === 'paused') open.forEach(e => { e.end = Date.now(); });
     else if (!open.some(e => e.ref === timer.ref)) timer.status = 'paused';
     entries = entries.filter(e => e.end == null || e.end > e.start);
-    return { version: 2, updatedAt: Number(d?.updatedAt) || 0, blocks, tasks, entries, timer, settings: s };
+    return { version: 2, updatedAt: Number(d?.updatedAt) || 0, blocks, tasks, entries, timer, settings: s, vision: normalizeVision(d?.vision) };
   }
 
   let storeKey = GUEST_KEY;
@@ -417,8 +475,18 @@
       delete t.prevRepeat;
     }
     state.blocks.forEach(b => { if (b.taskId === t.id && !b.repeat) b.doneOn = t.done ? [b.date] : []; });
+    const ms = milestoneForTask(t.id);
+    if (ms) ms.m.done = t.done;
     save();
     renderAll();
+  }
+
+  function milestoneForTask(taskId) {
+    for (const g of state.vision.goals) {
+      const m = g.milestones.find(x => x.taskId === taskId);
+      if (m) return { g, m };
+    }
+    return null;
   }
 
   function setOccDone(o, done) {
@@ -433,6 +501,8 @@
 
   function deleteTask(id) {
     state.tasks = state.tasks.filter(t => t.id !== id);
+    const ms = milestoneForTask(id);
+    if (ms) delete ms.m.taskId;
     state.blocks.forEach(b => { if (b.taskId === id) delete b.taskId; });
     if (state.timer?.ref === 'task:' + id) { closeOpen(Date.now()); state.timer = null; }
   }
@@ -548,7 +618,7 @@
   }
 
   // ---------- DOM refs ----------
-  const views = { timeblock: $('#view-timeblock'), todo: $('#view-todo'), insights: $('#view-insights') };
+  const views = { timeblock: $('#view-timeblock'), todo: $('#view-todo'), insights: $('#view-insights'), vision: $('#view-vision') };
   const modeBtns = document.querySelectorAll('.mode-switch [data-mode]');
   const viewSwitch = $('#view-switch');
   const periodTitle = $('#period-title'), periodSub = $('#period-sub'), periodLabel = $('#period-label');
@@ -584,7 +654,7 @@
   }
 
   const mode = () => state.settings.mode;
-  const VIEW_KEY = { timeblock: 'tbView', todo: 'todoView', insights: 'insView' };
+  const VIEW_KEY = { timeblock: 'tbView', todo: 'todoView', insights: 'insView', vision: 'visView' };
   const viewFor = (m = mode()) => state.settings[VIEW_KEY[m]];
 
   function setMode(m) {
@@ -619,7 +689,7 @@
 
   function step(dir) {
     const v = viewFor();
-    if (v === 'list') return;
+    if (LIST_VIEWS.includes(v)) return;
     currentDate = v === 'week' ? addDays(currentDate, 7 * dir) : v === 'month' ? addMonths(currentDate, dir) : addDays(currentDate, dir);
     renderAll();
     scrollToRelevant();
@@ -642,18 +712,27 @@
     const m = mode(), v = viewFor();
     viewSwitch.innerHTML = VIEWS[m].map(([id, label]) =>
       `<button type="button" role="tab" data-view="${id}" aria-selected="${id === v}">${label}</button>`).join('');
-    document.body.classList.toggle('list-view', v === 'list');
+    document.body.classList.toggle('list-view', LIST_VIEWS.includes(v));
     const today = todayISO();
-    if (v === 'list') {
-      periodTitle.textContent = 'All tasks';
-      const open = state.tasks.filter(t => !t.done).length;
-      periodSub.textContent = open ? `${open} open` : 'Nothing open';
+    if (LIST_VIEWS.includes(v)) {
+      if (v === 'list') {
+        periodTitle.textContent = 'All tasks';
+        const open = state.tasks.filter(t => !t.done).length;
+        periodSub.textContent = open ? `${open} open` : 'Nothing open';
+      } else if (v === 'board') {
+        periodTitle.textContent = 'Vision board';
+        periodSub.textContent = 'See it, feel it, plan it';
+      } else {
+        const g = state.vision.goals;
+        periodTitle.textContent = 'Life goals';
+        periodSub.textContent = g.length ? `${g.filter(x => x.status === 'active').length} active · ${g.filter(x => x.status === 'done').length} achieved` : 'Dream big, then break it down';
+      }
       periodLabel.disabled = true;
       return;
     }
     periodLabel.disabled = false;
     const [a, b] = periodRange(v);
-    if (v === 'day') {
+    if (v === 'day' || v === 'journal') {
       const rel = relDay(a);
       const d = fromISO(a);
       periodTitle.textContent = rel || d.toLocaleDateString(undefined, { weekday: 'long' });
@@ -675,12 +754,13 @@
     const m = mode();
     for (const [k, el] of Object.entries(views)) el.hidden = k !== m;
     modeBtns.forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
-    fab.hidden = m === 'insights';
+    fab.hidden = m === 'insights' || m === 'vision';
     fab.setAttribute('aria-label', m === 'todo' ? 'Add task' : 'Add time block');
     renderToolbar();
     if (m === 'timeblock') renderTimeblock();
     else if (m === 'todo') renderTodo();
-    else renderInsights();
+    else if (m === 'insights') renderInsights();
+    else renderVision();
     renderTimerBar();
   }
 
@@ -909,6 +989,7 @@
             ${dueInfo(t, today)}
             ${t.repeat ? `<span class="pill" title="${esc(describeRepeat(t.repeat, t.due))}">${ICON.repeat}${esc(REPEAT_FREQS[t.repeat.freq])}</span>` : ''}
             ${trackPill(ref, plannedForRef(ref))}
+            ${(() => { const ms = milestoneForTask(t.id); return ms ? `<span class="pill" title="Step of a life goal">🎯 ${esc(ms.g.title)}</span>` : ''; })()}
             ${t.notes ? '<span class="pill">Notes</span>' : ''}
           </span>
         </button>
@@ -1196,24 +1277,393 @@
     return out + '</svg>';
   }
 
-  // Hover tooltips for insights
-  insightsEl.addEventListener('pointermove', e => {
-    const t = e.target.closest('[data-tip]');
-    if (!t) { tooltip.hidden = true; return; }
-    tooltip.innerHTML = t.getAttribute('data-tip');
-    tooltip.hidden = false;
-    const r = tooltip.getBoundingClientRect();
-    let x = e.clientX + 14, y = e.clientY + 14;
-    if (x + r.width > innerWidth - 8) x = e.clientX - r.width - 14;
-    if (y + r.height > innerHeight - 8) y = e.clientY - r.height - 14;
-    tooltip.style.left = x + 'px';
-    tooltip.style.top = y + 'px';
-  });
-  insightsEl.addEventListener('pointerleave', () => { tooltip.hidden = true; });
+  // Hover tooltips for charts
+  function attachTips(el) {
+    el.addEventListener('pointermove', e => {
+      const t = e.target.closest('[data-tip]');
+      if (!t) { tooltip.hidden = true; return; }
+      tooltip.innerHTML = t.getAttribute('data-tip');
+      tooltip.hidden = false;
+      const r = tooltip.getBoundingClientRect();
+      let x = e.clientX + 14, y = e.clientY + 14;
+      if (x + r.width > innerWidth - 8) x = e.clientX - r.width - 14;
+      if (y + r.height > innerHeight - 8) y = e.clientY - r.height - 14;
+      tooltip.style.left = x + 'px';
+      tooltip.style.top = y + 'px';
+    });
+    el.addEventListener('pointerleave', () => { tooltip.hidden = true; });
+  }
+  attachTips(insightsEl);
   insightsEl.addEventListener('click', e => {
     const del = e.target.closest('[data-del-entry]');
     if (!del) return;
     withUndo('Session deleted', () => { state.entries = state.entries.filter(x => x.id !== del.dataset.delEntry); });
+  });
+
+  // ---------- Vision: board, goals, journal ----------
+  const visionEl = $('#vision-content');
+  attachTips(visionEl);
+  let goalFilter = 'active';
+  let goalPrefillArea = null;
+  let visSaveT = null;
+  const findGoal = id => state.vision.goals.find(g => g.id === id);
+  const areaOptions = sel => LIFE_AREAS.map(a => `<option value="${a.id}"${a.id === sel ? ' selected' : ''}>${a.emoji} ${esc(a.name)}</option>`).join('');
+  const horizonOptions = sel => HORIZONS.map(([id, l]) => `<option value="${id}"${id === sel ? ' selected' : ''}>${l}</option>`).join('');
+
+  // Typing autosaves shortly after you stop.
+  function saveSoon() {
+    clearTimeout(visSaveT);
+    visSaveT = setTimeout(() => {
+      visSaveT = null;
+      save();
+      visionEl.querySelectorAll('.saved-hint').forEach(n => {
+        n.textContent = 'Saved ✓';
+        n.classList.add('on');
+        clearTimeout(n._t);
+        n._t = setTimeout(() => n.classList.remove('on'), 1500);
+      });
+    }, 450);
+  }
+
+  function todaysAffirmation() {
+    const a = state.vision.affirmations;
+    if (!a.length) return '';
+    let h = 0;
+    for (const c of todayISO()) h = (h * 31 + c.charCodeAt(0)) | 0;
+    return a[Math.abs(h) % a.length].text;
+  }
+
+  function renderVision() {
+    const v = state.settings.visView;
+    if (v === 'goals') renderGoals();
+    else if (v === 'journal') renderJournal();
+    else renderBoard();
+  }
+
+  function renderBoard() {
+    const V = state.vision;
+    const aff = todaysAffirmation();
+    visionEl.innerHTML = `
+      <div class="card vis-hero">
+        <span class="eyebrow">Today's affirmation</span>
+        <p class="affirm-big">${aff ? esc(aff) : 'Add an affirmation below and one will greet you here every day.'}</p>
+      </div>
+      <div class="vis-grid">
+        <div class="card vis-card">
+          <div class="vis-head"><h2>My vision</h2><span class="saved-hint"></span></div>
+          <p class="muted small">Describe the life you're creating as if it's already real: present tense, with feeling.</p>
+          <textarea data-bind="statement" rows="7" placeholder="I wake up full of energy in my bright, peaceful home. My work…">${esc(V.statement)}</textarea>
+        </div>
+        <div class="card vis-card">
+          <div class="vis-head"><h2>Affirmations</h2><span class="muted small">${V.affirmations.length}</span></div>
+          <form class="inline-form" data-form="affirmation" autocomplete="off">
+            <input type="text" name="text" maxlength="200" placeholder="I am… / I attract… / I deserve…" aria-label="New affirmation">
+            <button class="btn" type="submit">Add</button>
+          </form>
+          <ul class="affirm-list">${V.affirmations.map(a => `<li><span>${esc(a.text)}</span><button type="button" class="icon-btn sm" data-del-aff="${esc(a.id)}" aria-label="Remove affirmation" title="Remove">${ICON.trash}</button></li>`).join('') || '<li class="muted small">No affirmations yet. Try “I am becoming the person I want to be.”</li>'}</ul>
+        </div>
+      </div>
+      <div class="card vis-card">
+        <div class="vis-head"><h2>Vision board</h2><span class="muted small">${V.board.length} dream${V.board.length === 1 ? '' : 's'}</span></div>
+        <form class="inline-form tile-form" data-form="tile" autocomplete="off">
+          <input type="text" name="emoji" maxlength="4" placeholder="🌴" aria-label="Emoji" class="emoji-in">
+          <input type="text" name="text" maxlength="120" placeholder="Travel to Japan, run a marathon, own a home…" aria-label="Dream">
+          <select name="area" aria-label="Life area">${areaOptions('purpose')}</select>
+          <button class="btn primary" type="submit">Add</button>
+        </form>
+        <div class="tiles">${V.board.map(t => {
+          const a = areaOf(t.area);
+          return `<div class="tile cat-${a.cat}"><span class="tile-emoji">${esc(t.emoji)}</span><span class="tile-text">${esc(t.text)}</span>` +
+            `<span class="tile-area">${esc(a.name)}</span><button type="button" class="tile-del" data-del-tile="${esc(t.id)}" aria-label="Remove ${esc(t.text)}">×</button></div>`;
+        }).join('') || '<p class="muted small">Add the things you want to see in your life, with an emoji that makes you feel them.</p>'}</div>
+      </div>
+      <div class="card vis-card">
+        <div class="vis-head"><h2>Wheel of life</h2><span class="saved-hint"></span></div>
+        <p class="muted small">How satisfied are you with each area right now? 1 = not at all, 10 = completely.</p>
+        <div class="wheel-wrap">
+          <div class="wheel-chart" id="wheel-chart">${wheelSVG()}</div>
+          <div class="wheel-sliders">${LIFE_AREAS.map(a => `
+            <label class="wheel-row"><span class="wl">${a.emoji} ${esc(a.name)}</span>
+              <input type="range" min="1" max="10" step="1" value="${V.areas[a.id]}" data-area="${a.id}" aria-label="${esc(a.name)} satisfaction">
+              <b class="num" data-area-val="${a.id}">${V.areas[a.id]}</b></label>`).join('')}
+          </div>
+        </div>
+        <div class="wheel-tip" id="wheel-tip">${wheelTip()}</div>
+      </div>`;
+  }
+
+  function wheelSVG() {
+    const A = state.vision.areas, n = LIFE_AREAS.length, cx = 170, cy = 160, R = 112;
+    const pt = (i, r) => { const ang = -Math.PI / 2 + i * 2 * Math.PI / n; return [cx + Math.cos(ang) * r, cy + Math.sin(ang) * r]; };
+    const poly = r => LIFE_AREAS.map((_, i) => pt(i, r).map(v => v.toFixed(1)).join(',')).join(' ');
+    let s = `<svg class="chart-svg wheel-svg" viewBox="-70 0 480 320" role="img" aria-label="Wheel of life: ${LIFE_AREAS.map(a => `${a.name} ${A[a.id]} of 10`).join(', ')}">`;
+    for (const lvl of [2, 4, 6, 8, 10]) s += `<polygon class="ring" points="${poly(R * lvl / 10)}"/>`;
+    LIFE_AREAS.forEach((_, i) => { const [x, y] = pt(i, R); s += `<line class="spoke" x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"/>`; });
+    s += `<polygon class="shape" points="${LIFE_AREAS.map((a, i) => pt(i, R * A[a.id] / 10).map(v => v.toFixed(1)).join(',')).join(' ')}"/>`;
+    LIFE_AREAS.forEach((a, i) => {
+      const [x, y] = pt(i, R * A[a.id] / 10);
+      s += `<circle class="dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"/><circle class="hit" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="14" data-tip="<b>${esc(a.name)}</b>: ${A[a.id]}/10"/>`;
+      const [lx, ly] = pt(i, R + 18);
+      const anchor = Math.abs(lx - cx) < 5 ? 'middle' : lx > cx ? 'start' : 'end';
+      s += `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="${anchor}">${a.emoji} ${esc(a.name.split(' ')[0])} · ${A[a.id]}</text>`;
+    });
+    return s + '</svg>';
+  }
+
+  function wheelTip() {
+    const A = state.vision.areas;
+    const low = [...LIFE_AREAS].sort((a, b) => A[a.id] - A[b.id])[0];
+    const avg = (sum(LIFE_AREAS, a => A[a.id]) / LIFE_AREAS.length).toFixed(1);
+    return `Average <b>${avg}</b>/10. Needs the most love: <b>${low.emoji} ${esc(low.name)}</b> (${A[low.id]}/10). ` +
+      `<button type="button" class="link-btn" data-goal-area="${low.id}">Set a goal for ${esc(low.name)} →</button>`;
+  }
+
+  function renderGoals() {
+    const G = state.vision.goals;
+    const list = G.filter(g => goalFilter === 'all' || g.status === goalFilter);
+    const counts = { active: G.filter(g => g.status === 'active').length, done: G.filter(g => g.status === 'done').length, all: G.length };
+    let html = `
+      <form class="card todo-form" data-form="goal" autocomplete="off">
+        <input type="text" name="title" maxlength="160" placeholder="What do you want to achieve?" aria-label="New goal" required>
+        <div class="todo-form-opts">
+          <select name="area" aria-label="Life area">${areaOptions(goalPrefillArea || 'growth')}</select>
+          <select name="horizon" aria-label="Time frame">${horizonOptions('year')}</select>
+          <input type="date" name="target" aria-label="Target date">
+          <button class="btn primary" type="submit">Add goal</button>
+        </div>
+      </form>
+      <div class="filters">${[['active', 'Active'], ['done', 'Achieved'], ['all', 'All']].map(([id, l]) =>
+        `<button type="button" class="chip" data-goal-filter="${id}" aria-pressed="${goalFilter === id}">${l}<span class="count">${counts[id]}</span></button>`).join('')}</div>`;
+    goalPrefillArea = null;
+    if (!list.length) {
+      html += goalFilter === 'done'
+        ? emptyState('No achieved goals yet', 'Mark a goal as achieved and celebrate it here.')
+        : emptyState('No goals yet', 'Add a big goal above, then break it into small steps you can put on your to-do list.');
+    }
+    for (const [hid, label] of HORIZONS) {
+      const gs = list.filter(g => g.horizon === hid);
+      if (gs.length) html += `<div class="todo-section"><h2 class="section-title">${esc(label)}</h2><div class="goal-grid">${gs.map(goalCard).join('')}</div></div>`;
+    }
+    visionEl.innerHTML = html;
+  }
+
+  function goalCard(g) {
+    const a = areaOf(g.area);
+    const total = g.milestones.length, done = g.milestones.filter(m => m.done).length;
+    const pct = g.status === 'done' ? 100 : total ? Math.round(done / total * 100) : 0;
+    const target = g.target ? `<span class="pill${g.status === 'active' && g.target < todayISO() ? ' overdue' : ''}">By ${esc(fmtShortDate(g.target))}</span>` : '';
+    return `<div class="card goal-card cat-${a.cat}${g.status === 'done' ? ' achieved' : ''}" data-goal="${esc(g.id)}">
+      <div class="goal-head">
+        <span class="goal-emoji" aria-hidden="true">${a.emoji}</span>
+        <div class="goal-title"><h3>${esc(g.title)}</h3>
+          <div class="todo-meta"><span class="pill">${esc(a.name)}</span>${target}${g.status === 'done' ? '<span class="pill live">Achieved 🎉</span>' : ''}</div></div>
+        <button type="button" class="icon-btn sm" data-act="goal-edit" aria-label="Edit goal" title="Edit">${ICON.pencil}</button>
+      </div>
+      ${g.why ? `<p class="goal-why">“${esc(g.why)}”</p>` : ''}
+      <div class="goal-progress"><div class="progress"><span style="width:${pct}%"></span></div><span class="num">${total ? `${done}/${total} steps` : `${pct}%`}</span></div>
+      <ul class="milestones">${g.milestones.map(m => `
+        <li data-ms="${esc(m.id)}" class="${m.done ? 'done' : ''}">
+          <input type="checkbox" class="todo-check" data-act="ms-toggle" ${m.done ? 'checked' : ''} aria-label="Step done: ${esc(m.title)}">
+          <span class="ms-title">${esc(m.title)}</span>
+          ${m.taskId && findTask(m.taskId) ? '<span class="pill" title="On your to-do list">In to-do</span>'
+            : m.done ? '' : '<button type="button" class="link-btn sm" data-act="ms-task" title="Add this step to your to-do list">+ To-do</button>'}
+          <button type="button" class="icon-btn sm hover-only" data-act="ms-del" aria-label="Remove step" title="Remove">${ICON.trash}</button>
+        </li>`).join('')}</ul>
+      ${g.status === 'active' ? `<form class="inline-form ms-form" data-form="milestone" autocomplete="off"><input type="text" name="title" maxlength="160" placeholder="Add a step…" aria-label="New step"><button class="btn sm" type="submit">Add</button></form>` : ''}
+      <div class="goal-foot">${g.status === 'active'
+        ? '<button type="button" class="btn sm" data-act="goal-done">Mark achieved 🎉</button>'
+        : '<button type="button" class="btn sm" data-act="goal-reopen">Reopen</button>'}</div>
+    </div>`;
+  }
+
+  const blankEntry = () => ({ mood: null, gratitude: ['', '', ''], intention: '', script: '', notes: '' });
+  function journalEntry(date, create) {
+    const J = state.vision.journal;
+    if (!J[date] && create) J[date] = blankEntry();
+    return J[date] || blankEntry();
+  }
+  const hasContent = j => !!j && (j.mood != null || j.gratitude.some(Boolean) || !!j.intention || !!j.script || !!j.notes);
+  function journalStreak() {
+    let d = todayISO(), n = 0;
+    if (!hasContent(state.vision.journal[d])) d = addDays(d, -1);
+    while (hasContent(state.vision.journal[d])) { n++; d = addDays(d, -1); }
+    return n;
+  }
+
+  function renderJournal() {
+    const d = currentDate, j = journalEntry(d, false), streak = journalStreak();
+    const recent = Object.keys(state.vision.journal).filter(x => x !== d && hasContent(state.vision.journal[x])).sort().reverse().slice(0, 7);
+    visionEl.innerHTML = `
+      <div class="journal-grid">
+        <div class="card vis-card">
+          <div class="vis-head"><h2>How do you feel?</h2>${streak ? `<span class="streak">🔥 ${streak}-day streak</span>` : ''}</div>
+          <div class="moods" role="group" aria-label="Mood">${MOODS.map(([emo, label], i) =>
+            `<button type="button" class="mood" data-mood="${i}" aria-pressed="${j.mood === i}" title="${label}"><span>${emo}</span><small>${label}</small></button>`).join('')}</div>
+        </div>
+        <div class="card vis-card">
+          <div class="vis-head"><h2>Today's intention</h2><span class="saved-hint"></span></div>
+          <input type="text" data-j="intention" maxlength="200" value="${esc(j.intention)}" placeholder="Today I will…" aria-label="Intention">
+        </div>
+        <div class="card vis-card">
+          <div class="vis-head"><h2>I'm grateful for…</h2></div>
+          <div class="grat-list">${[0, 1, 2].map(i => `<input type="text" data-j="gratitude.${i}" maxlength="200" value="${esc(j.gratitude[i])}" placeholder="${i + 1}." aria-label="Gratitude ${i + 1}">`).join('')}</div>
+        </div>
+        <div class="card vis-card">
+          <div class="vis-head"><h2>Manifestation scripting</h2></div>
+          <p class="muted small">Write about what you want as if it has already happened, and feel grateful for it.</p>
+          <textarea data-j="script" rows="5" placeholder="I'm so happy and grateful now that…" aria-label="Manifestation scripting">${esc(j.script)}</textarea>
+        </div>
+        <div class="card vis-card wide">
+          <div class="vis-head"><h2>Reflection</h2></div>
+          <textarea data-j="notes" rows="3" placeholder="What went well? What did I learn? What will I do differently tomorrow?" aria-label="Reflection">${esc(j.notes)}</textarea>
+        </div>
+        <div class="card vis-card wide">
+          <div class="vis-head"><h2>Earlier entries</h2></div>
+          ${recent.length ? `<ul class="j-recent">${recent.map(x => {
+            const e = state.vision.journal[x];
+            return `<li><button type="button" data-goto-date="${x}"><span class="j-mood">${e.mood != null ? MOODS[e.mood][0] : '📝'}</span>` +
+              `<span class="j-date">${esc(dayLabel(x))}</span><span class="j-snip">${esc(e.intention || e.gratitude.find(Boolean) || e.script || e.notes)}</span></button></li>`;
+          }).join('')}</ul>` : '<p class="muted small">Your past entries will show up here. Use ← → at the top to move between days.</p>'}
+        </div>
+      </div>`;
+  }
+
+  visionEl.addEventListener('input', e => {
+    const t = e.target;
+    if (t.dataset.bind === 'statement') { state.vision.statement = t.value; saveSoon(); }
+    else if (t.dataset.j) {
+      const j = journalEntry(currentDate, true);
+      const [k, i] = t.dataset.j.split('.');
+      if (i != null) j[k][+i] = t.value; else j[k] = t.value;
+      saveSoon();
+    } else if (t.dataset.area) {
+      state.vision.areas[t.dataset.area] = +t.value;
+      visionEl.querySelector(`[data-area-val="${t.dataset.area}"]`).textContent = t.value;
+      $('#wheel-chart').innerHTML = wheelSVG();
+      $('#wheel-tip').innerHTML = wheelTip();
+      saveSoon();
+    }
+  });
+
+  visionEl.addEventListener('submit', e => {
+    const f = e.target.closest('[data-form]');
+    if (!f) return;
+    e.preventDefault();
+    const val = n => (f.elements[n]?.value || '').trim();
+    const V = state.vision;
+    const kind = f.dataset.form;
+    const goalId = f.closest('[data-goal]')?.dataset.goal;
+    if (kind === 'affirmation') {
+      const text = val('text');
+      if (!text) return;
+      V.affirmations.push({ id: uid(), text });
+    } else if (kind === 'tile') {
+      const text = val('text');
+      if (!text) return;
+      V.board.push({ id: uid(), text, emoji: val('emoji') || areaOf(val('area')).emoji, area: val('area') });
+    } else if (kind === 'goal') {
+      const title = val('title');
+      if (!title) return;
+      V.goals.push({ id: uid(), title, area: val('area'), horizon: val('horizon'), target: val('target'), why: '', status: 'active', created: Date.now(), doneAt: null, milestones: [] });
+      if (goalFilter === 'done') goalFilter = 'active';
+      toast('Goal added. Now break it into small steps.');
+    } else if (kind === 'milestone') {
+      const g = findGoal(goalId);
+      const title = val('title');
+      if (!g || !title) return;
+      g.milestones.push({ id: uid(), title, done: false });
+    }
+    save();
+    renderAll();
+    // Keep the cursor in the same box so you can add several in a row.
+    const name = kind === 'affirmation' || kind === 'tile' ? 'text' : 'title';
+    const scope = kind === 'milestone' ? visionEl.querySelector(`[data-goal="${goalId}"]`) : visionEl;
+    scope?.querySelector(`[data-form="${kind}"] input[name="${name}"]`)?.focus();
+  });
+
+  visionEl.addEventListener('click', e => {
+    const el = e.target.closest('[data-del-aff],[data-del-tile],[data-goal-area],[data-goal-filter],[data-mood],[data-goto-date],[data-act]');
+    if (!el) return;
+    const V = state.vision;
+    if (el.dataset.delAff) { withUndo('Affirmation removed', () => { V.affirmations = V.affirmations.filter(a => a.id !== el.dataset.delAff); }); return; }
+    if (el.dataset.delTile) { withUndo('Removed from your vision board', () => { V.board = V.board.filter(t => t.id !== el.dataset.delTile); }); return; }
+    if (el.dataset.goalArea) {
+      goalPrefillArea = el.dataset.goalArea;
+      setView('goals');
+      visionEl.querySelector('[data-form="goal"] input[name="title"]')?.focus();
+      return;
+    }
+    if (el.dataset.goalFilter) { goalFilter = el.dataset.goalFilter; renderVision(); return; }
+    if (el.dataset.mood != null) {
+      const j = journalEntry(currentDate, true);
+      const m = +el.dataset.mood;
+      j.mood = j.mood === m ? null : m;
+      save();
+      renderVision();
+      return;
+    }
+    if (el.dataset.gotoDate) { currentDate = el.dataset.gotoDate; renderAll(); return; }
+    const g = findGoal(el.closest('[data-goal]')?.dataset.goal);
+    if (!g) return;
+    const m = g.milestones.find(x => x.id === el.closest('[data-ms]')?.dataset.ms);
+    switch (el.dataset.act) {
+      case 'goal-edit': openGoalDialog(g); break;
+      case 'goal-done':
+        g.status = 'done'; g.doneAt = Date.now();
+        save(); renderAll();
+        toast(`🎉 Goal achieved: “${g.title}”. Well done!`);
+        break;
+      case 'goal-reopen': g.status = 'active'; g.doneAt = null; save(); renderAll(); break;
+      case 'ms-toggle': {
+        if (!m) return;
+        m.done = el.checked;
+        const t = m.taskId && findTask(m.taskId);
+        if (t && t.done !== m.done) { setTaskDone(t, m.done); return; }
+        save(); renderAll();
+        break;
+      }
+      case 'ms-task': {
+        if (!m) return;
+        const t = addTask({ title: m.title, category: 'personal' });
+        m.taskId = t.id;
+        save(); renderAll();
+        toast('Added to your to-do list.');
+        break;
+      }
+      case 'ms-del': if (m) withUndo('Step removed', () => { g.milestones = g.milestones.filter(x => x !== m); }); break;
+    }
+  });
+
+  // Goal edit dialog
+  const goalDialog = $('#goal-dialog');
+  let editingGoalId = null;
+  $('#g-area').innerHTML = areaOptions('growth');
+  $('#g-horizon').innerHTML = horizonOptions('year');
+  function openGoalDialog(g) {
+    editingGoalId = g.id;
+    $('#g-title').value = g.title;
+    $('#g-area').value = g.area;
+    $('#g-horizon').value = g.horizon;
+    $('#g-target').value = g.target;
+    $('#g-why').value = g.why;
+    $('#g-error').hidden = true;
+    goalDialog.showModal();
+  }
+  $('#goal-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const g = findGoal(editingGoalId);
+    if (!g) return goalDialog.close();
+    const title = $('#g-title').value.trim();
+    if (!title) return showError($('#g-error'), 'Give your goal a name.');
+    Object.assign(g, { title, area: $('#g-area').value, horizon: $('#g-horizon').value, target: $('#g-target').value, why: $('#g-why').value.trim() });
+    save();
+    goalDialog.close();
+    renderAll();
+  });
+  $('#g-delete').addEventListener('click', () => {
+    const g = findGoal(editingGoalId);
+    goalDialog.close();
+    if (g) withUndo(`Deleted goal “${g.title}”`, () => { state.vision.goals = state.vision.goals.filter(x => x !== g); });
   });
 
   // ---------- Timer bar ----------
@@ -1610,32 +2060,70 @@
   }
 
   // ---------- Timeline pointer interactions ----------
-  // Drag empty space to create, drag a block to move (also across days), drag its bottom edge to resize.
+  // Mouse: drag empty space to create, drag a block to move (also across days), drag its bottom edge to resize.
+  // Touch: swiping always scrolls. Tap = open / create, press-and-hold a block = move it, bottom edge = resize.
   let drag = null;
+  let pending = null;          // a touch press that may still turn into a tap, a hold-to-drag, or a scroll
+  const HOLD_MS = 420;
 
   tbMain.addEventListener('pointerdown', e => {
     if (e.button !== 0 || e.target.closest('.check, .play')) return;
     const col = e.target.closest('.col');
     if (!col || !colsEl) return;
-    if (e.pointerType === 'mouse') e.preventDefault();
+    const touch = e.pointerType !== 'mouse';
+    if (!touch) e.preventDefault();
     const cols = [...colsEl.children];
     const node = e.target.closest('.block');
     const y = e.clientY - col.getBoundingClientRect().top;
+    let d;
     if (node && !node.classList.contains('ghost')) {
       const o = findOcc(node.dataset.key);
       if (!o) return;
-      drag = {
+      d = {
         mode: e.target.closest('.resize') ? 'resize' : 'move',
         o, node, cols, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY,
         newStart: o.start, newEnd: o.end, newDate: o.date, moved: false,
       };
     } else {
-      drag = { mode: 'create', col, cols, date: col.dataset.date, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, anchor: snap(yToMin(y)), clickMin: yToMin(y), moved: false, ghost: null };
+      d = { mode: 'create', col, cols, date: col.dataset.date, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, anchor: snap(yToMin(y)), clickMin: yToMin(y), moved: false, ghost: null };
     }
-    colsEl.setPointerCapture(e.pointerId);
+    if (!touch || d.mode === 'resize') {
+      drag = d;
+      d.touch = touch;
+      try { colsEl.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+      return;
+    }
+    // Touch: wait to see whether this is a tap, a hold, or a scroll.
+    pending = d;
+    if (d.mode === 'move') {
+      d.timer = setTimeout(() => {
+        if (pending !== d) return;
+        pending = null;
+        drag = d;
+        d.touch = true;
+        d.held = true;
+        d.node.classList.add('dragging');
+        navigator.vibrate?.(12);
+        try { colsEl.setPointerCapture(d.pointerId); } catch { /* ignore */ }
+      }, HOLD_MS);
+    }
   });
 
+  // While a held block is being dragged, stop the page from scrolling.
+  tbMain.addEventListener('touchmove', e => { if (drag?.touch) e.preventDefault(); }, { passive: false });
+  tbMain.addEventListener('contextmenu', e => { if (drag?.touch || pending) e.preventDefault(); });
+
+  function clearPending() {
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pending = null;
+  }
+
   tbMain.addEventListener('pointermove', e => {
+    if (pending && e.pointerId === pending.pointerId) {
+      if (Math.abs(e.clientY - pending.startY) > 8 || Math.abs(e.clientX - pending.startX) > 8) clearPending(); // it's a scroll
+      return;
+    }
     if (!drag || e.pointerId !== drag.pointerId) return;
     const dy = e.clientY - drag.startY, dx = e.clientX - drag.startX;
     if (!drag.moved && Math.abs(dy) < 5 && Math.abs(dx) < 5) return;
@@ -1685,12 +2173,27 @@
   });
 
   function endDrag(e, cancelled) {
+    if (pending && e.pointerId === pending.pointerId) {
+      const p = pending;
+      clearPending();
+      if (cancelled) return; // the browser took over to scroll — leave the timeline alone
+      // A quick tap: open the block, or start a new one-hour block.
+      if (p.mode === 'move') { openBlockDialog(p.o); return; }
+      const [lo, hi] = dayBounds();
+      const s = clamp(Math.floor(p.clickMin / 30) * 30, lo, hi - 30);
+      openBlockDialog({ date: p.date, start: s, end: Math.min(s + 60, hi) });
+      return;
+    }
     if (!drag || e.pointerId !== drag.pointerId) return;
     const d = drag;
     drag = null;
     d.ghost?.remove();
-    if (cancelled) { renderTimeblock(); return; }
+    if (cancelled) {
+      if (d.moved) renderTimeblock(); else d.node?.classList.remove('dragging');
+      return;
+    }
     const [lo, hi] = dayBounds();
+    if (d.held && !d.moved) { d.node.classList.remove('dragging'); return; }
     if (d.mode === 'create') {
       if (d.moved) openBlockDialog({ date: d.date, start: d.newStart, end: d.newEnd });
       else {
@@ -1915,7 +2418,11 @@
     if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); return; }
     if (e.key === 'ArrowRight') { e.preventDefault(); step(1); return; }
     if (key === 't') { goToday(); return; }
-    if (key === 'd' || key === 'w' || key === 'm') { setView({ d: 'day', w: 'week', m: 'month' }[key]); return; }
+    if (key === 'd' || key === 'w' || key === 'm') {
+      const v = { d: 'day', w: 'week', m: 'month' }[key];
+      if (VIEWS[mode()].some(x => x[0] === v)) setView(v);
+      return;
+    }
     if (key === 'n') { e.preventDefault(); newItem(); }
   });
 
@@ -1930,18 +2437,43 @@
       if (currentDate === lastToday) currentDate = t;
       lastToday = t;
       renderAll();
-    } else if (!drag && mode() === 'timeblock' && state.settings.tbView !== 'month' && !document.querySelector('dialog[open]')) {
-      renderTimeblock();
+    } else if (mode() === 'timeblock') {
+      updateNow();
     }
   }, 1000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && !drag) renderAll(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && !drag && !pending) renderAll(); });
+
+  // Move the red "now" line and the current-block highlight without rebuilding the timeline (keeps scrolling smooth).
+  function updateNow() {
+    if (!colsEl?.isConnected) return;
+    const today = todayISO(), m = nowMin();
+    const [lo, hi] = dayBounds();
+    colsEl.querySelectorAll('.now-line').forEach(n => n.remove());
+    const col = colsEl.querySelector(`.col[data-date="${today}"]`);
+    if (col && m >= lo && m <= hi) {
+      const line = document.createElement('div');
+      line.className = 'now-line';
+      line.style.top = minToY(m) + 'px';
+      col.appendChild(line);
+    }
+    colsEl.querySelectorAll('.block[data-key]').forEach(n => {
+      const o = findOcc(n.dataset.key);
+      if (o) n.classList.toggle('now', o.date === today && m >= o.start && m < o.end);
+    });
+  }
 
   // Keep tabs in sync if the app is open twice.
   window.addEventListener('storage', e => {
     if (e.key === storeKey && !drag) { state = loadFrom(storeKey); applyTheme(); renderAll(); }
   });
-  let resizeT;
-  window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (!drag) renderAll(); }, 150); });
+  // Only re-layout when the width changes — phones fire "resize" when the address bar hides while scrolling.
+  let resizeT, lastWidth = innerWidth;
+  window.addEventListener('resize', () => {
+    if (innerWidth === lastWidth) return;
+    lastWidth = innerWidth;
+    clearTimeout(resizeT);
+    resizeT = setTimeout(() => { if (!drag && !pending) renderAll(); }, 150);
+  });
 
   // ---------- API used by auth.js (sign-in and cloud sync) ----------
   window.DayblockApp = {
@@ -1964,7 +2496,9 @@
     },
     // Replace data with a copy from the cloud (does not trigger another upload).
     replaceState(data) {
-      if (drag) return;
+      if (drag || pending || visSaveT) return; // don't interrupt a drag or unsaved typing; our save will sync next
+      const typing = document.activeElement?.closest?.('#vision-content') && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
+      if (typing) { state = normalize(data); persist(); return; }
       state = normalize(data);
       persist();
       applyTheme();

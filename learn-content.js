@@ -120,7 +120,7 @@ window.DAYBLOCK_LEARN = {
       body: `
         <p>Open <b>Settings</b> (your name or the gear at the bottom of the sidebar, or the avatar at the top on a phone) to:</p>
         <ul>
-          <li>Choose a <b>look</b>: <b>Aurora</b> (soft glass), <b>Midnight</b> (dark glow) or <b>Paper</b> (warm ink), each in light or dark.</li>
+          <li>Choose a <b>look</b>: <b>Classic</b> (the original design), <b>Aurora</b> (soft glass), <b>Midnight</b> (dark glow) or <b>Paper</b> (warm ink), each in light or dark.</li>
           <li>Create your own <b>categories</b> with any name and colour.</li>
           <li>Set your day hours, the first day of the week, and what happens when linked tasks run late.</li>
           <li>Sign in with Google or email to <b>sync across devices</b>, export a backup, or install Dayblock as an app.</li>

@@ -12,7 +12,7 @@ One codebase that works as a **website** and as an **installable app** (desktop 
 - **Repeats** — blocks and tasks can repeat daily, every weekday, weekly (pick days) or monthly, every N days/weeks/months, with an optional end date.
   - Editing a repeating block asks: *only this one*, *this and following*, or *all*.
   - Ticking off a repeating task creates the next one automatically.
-- **Looks** — Aurora (soft glass), Midnight (dark glow) or Paper (warm ink), each in light or dark. Pick in Settings.
+- **Looks** — Classic (the original design, default), Aurora (soft glass), Midnight (dark glow) or Paper (warm ink), each in light or dark. Pick in Settings.
 - **Custom categories** — add, rename, recolor or delete categories in Settings.
 - **Time tracking** — press ▶ on any task or block. Pause for breaks, Resume, and **Stop** when finished (stopping marks it complete).
   The timer shows when you actually started, the live time and your planned slot; the timeline shows tracked sessions as a slim lane.

@@ -3,8 +3,60 @@
    app.js sets <html data-look="…" data-scheme="light|dark">.
    ===================================================================== */
 
-/* ---------- Aurora · light (default) ---------- */
-:root, :root[data-look="aurora"] {
+/* ---------- Classic · light (the original Dayblock design, default) ---------- */
+:root, :root[data-look="classic"] {
+  --bg: #f5f6fa; --bg-solid: #f5f6fa;
+  --side-bg: #ffffff; --side-border: #e2e5ee;
+  --surface: #ffffff; --surface-solid: #ffffff; --surface-2: #f0f2f7;
+  --input-bg: #ffffff;
+  --border: #e2e5ee; --border-strong: #c5cad8;
+  --grid-line: #e2e5ee; --grid-half: #f0f1f6;
+  --text: #171a24; --muted: #636b80;
+  --accent: #4f46e5; --accent-2: #4f46e5; --accent-grad: #4f46e5;
+  --accent-soft: #e4e2fd; --accent-mid: #a5a1f5; --on-accent: #ffffff; --progress: #4f46e5;
+  --danger: #d92d20; --danger-soft: #fdecea; --good: #067647; --good-soft: #e3f5ec; --warn: #b45309; --warn-soft: #fff3dd;
+  --now: #e5484d; --now-glow: none;
+  --shadow: 0 1px 2px rgba(20, 24, 40, .05), 0 6px 20px rgba(20, 24, 40, .06); --shadow-sm: 0 1px 3px rgba(20, 24, 40, .1); --shadow-lg: 0 24px 64px rgba(20, 24, 40, .22);
+  --glass: none;
+  --r: 14px; --r-sm: 10px; --r-xs: 8px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; --font-display: var(--font); --title-weight: 700;
+  --nav-on-bg: #e4e2fd; --nav-on-fg: #3b33c4; --nav-on-shadow: none;
+  --seg-bg: #f0f2f7; --seg-on-bg: #ffffff; --seg-on-fg: #171a24;
+  --fab-bg: #4f46e5; --fab-fg: #fff; --fab-shadow: 0 8px 24px rgba(79, 70, 229, .4);
+  --timer-bg: #ffffff; --timer-fg: var(--text);
+  --live-bg: #e4e2fd; --live-fg: #4338ca;
+  --hot-bg: var(--accent-soft); --hot-fg: var(--text); --hot-sub: var(--muted); --hot-shadow: none;
+  --cat-fg-amt: 100%; --cat-fg-blend: #000; --cat-bg-amt: 13%;
+  --p-high: #e5484d; --p-med: #f59e0b; --p-low: #94a3b8;
+  --theme-color: #f5f6fa;
+  color-scheme: light;
+}
+/* ---------- Classic · dark ---------- */
+:root[data-look="classic"][data-scheme="dark"] {
+  --bg: #0f1117; --bg-solid: #0f1117;
+  --side-bg: #13151d; --side-border: #2a2f3e;
+  --surface: #171a23; --surface-solid: #171a23; --surface-2: #1f2331;
+  --input-bg: #171a23;
+  --border: #2a2f3e; --border-strong: #454c60;
+  --grid-line: #2a2f3e; --grid-half: #1d2130;
+  --text: #e8eaf2; --muted: #9aa2b8;
+  --accent: #8b93ff; --accent-2: #8b93ff; --accent-grad: #8b93ff;
+  --accent-soft: #2a2e5c; --accent-mid: #565ec4; --on-accent: #0f1117; --progress: #8b93ff;
+  --danger: #ff6b61; --danger-soft: #3a1c1c; --good: #5ad19a; --good-soft: #15332a; --warn: #fbbf24; --warn-soft: rgba(251, 191, 36, .13);
+  --now: #ff6369;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .25); --shadow-sm: 0 1px 3px rgba(0, 0, 0, .4); --shadow-lg: 0 24px 64px rgba(0, 0, 0, .5);
+  --nav-on-bg: #2a2e5c; --nav-on-fg: #e8eaf2;
+  --seg-bg: #1f2331; --seg-on-bg: #2c3142; --seg-on-fg: #e8eaf2;
+  --fab-bg: #8b93ff; --fab-fg: #0f1117; --fab-shadow: 0 8px 24px rgba(139, 147, 255, .35);
+  --timer-bg: #1b1e29;
+  --live-bg: #2a2e5c; --live-fg: #c7cbff;
+  --cat-fg-amt: 70%; --cat-fg-blend: #fff; --cat-bg-amt: 22%;
+  --theme-color: #0f1117;
+  color-scheme: dark;
+}
+
+/* ---------- Aurora · light ---------- */
+:root[data-look="aurora"] {
   --bg: radial-gradient(900px 520px at 0% 0%, #e4dcff 0%, transparent 60%), radial-gradient(800px 520px at 100% 0%, #ffe3f2 0%, transparent 55%), radial-gradient(900px 620px at 60% 100%, #dbf1ff 0%, transparent 60%), #f6f5ff;
   --bg-solid: #f6f5ff;
   --side-bg: rgba(255, 255, 255, .55); --side-border: rgba(255, 255, 255, .8);
@@ -424,6 +476,11 @@ body.has-timer main:has(#view-timeblock:not([hidden])) { padding-bottom: 90px; }
 /* Midnight and Paper tint the tracked block with its own category color (computed on the block itself). */
 :root[data-look="midnight"] .block.tracking { background: linear-gradient(135deg, color-mix(in oklab, var(--cat) 30%, var(--surface-solid)), color-mix(in oklab, var(--cat) 12%, var(--surface-solid))); box-shadow: 0 0 0 1px color-mix(in oklab, var(--cat) 60%, transparent), 0 10px 30px color-mix(in oklab, var(--cat) 28%, transparent); }
 :root[data-look="paper"] .block.tracking { background: var(--cat-bg); box-shadow: inset 0 0 0 2px var(--hot-ring); }
+/* Classic: the original look, a 4px category bar and an outlined ring while tracking. */
+:root[data-look="classic"] .block { box-shadow: inset 4px 0 0 var(--cat); }
+:root[data-look="classic"] .block:hover { box-shadow: inset 4px 0 0 var(--cat), 0 2px 10px rgba(0, 0, 0, .12); transform: none; }
+:root[data-look="classic"] .block.now { box-shadow: inset 4px 0 0 var(--cat), inset 0 0 0 1.5px var(--cat); }
+:root[data-look="classic"] .block.tracking { background: var(--cat-bg); box-shadow: inset 4px 0 0 var(--cat), inset 0 0 0 2px var(--cat), 0 0 0 3px color-mix(in oklab, var(--cat) 25%, transparent); }
 .block.tracking .block-time, .block.tracking .block-actual { color: var(--hot-sub); }
 :root[data-look="aurora"] .block.tracking .check { border-color: #fff; }
 :root[data-look="aurora"] .block.tracking .play { color: #fff; }
@@ -615,7 +672,7 @@ dialog::backdrop { background: rgba(10, 12, 24, .45); backdrop-filter: blur(3px)
 .sync-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good); margin-right: 5px; vertical-align: middle; }
 .sync-dot.err { background: var(--danger); }
 .sync-dot.busy { background: var(--p-med); }
-.look-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.look-picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .look-opt { position: relative; }
 .look-opt input { position: absolute; opacity: 0; pointer-events: none; }
 .look-opt > span { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: var(--r-sm); border: 1.5px solid var(--border); cursor: pointer; font-size: 13px; font-weight: 700; }
@@ -624,6 +681,10 @@ dialog::backdrop { background: rgba(10, 12, 24, .45); backdrop-filter: blur(3px)
 .look-opt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .look-swatch { height: 54px; border-radius: 8px; display: flex !important; flex-direction: row !important; gap: 4px; padding: 7px; align-items: flex-end; }
 .look-swatch i { flex: 1; border-radius: 4px; }
+.look-swatch.classic { background: #f5f6fa; box-shadow: inset 0 0 0 1px #e2e5ee; }
+.look-swatch.classic i:nth-child(1) { height: 70%; background: #4f46e5; }
+.look-swatch.classic i:nth-child(2) { height: 45%; background: #ffffff; box-shadow: inset 0 0 0 1px #e2e5ee; }
+.look-swatch.classic i:nth-child(3) { height: 60%; background: #e3f6ee; box-shadow: inset 3px 0 0 #059669; }
 .look-swatch.aurora { background: linear-gradient(135deg, #e4dcff, #ffe3f2 60%, #dbf1ff); }
 .look-swatch.aurora i:nth-child(1) { height: 70%; background: linear-gradient(135deg, #6d5dfc, #a65cff); }
 .look-swatch.aurora i:nth-child(2) { height: 45%; background: #fff; }
@@ -636,7 +697,7 @@ dialog::backdrop { background: rgba(10, 12, 24, .45); backdrop-filter: blur(3px)
 .look-swatch.paper i:nth-child(1) { height: 70%; background: #22201b; }
 .look-swatch.paper i:nth-child(2) { height: 45%; background: #dfe7f1; }
 .look-swatch.paper i:nth-child(3) { height: 60%; background: #e85d3f; }
-.look-name { display: flex; justify-content: space-between; align-items: center; }
+.look-name { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; line-height: 1.25; }
 .look-name small { font-weight: 600; color: var(--muted); font-size: 11.5px; }
 .cat-editor { display: flex; flex-direction: column; gap: 6px; }
 .cat-edit-row { display: flex; align-items: center; gap: 8px; }
@@ -1035,7 +1096,7 @@ body.has-timer .toast { bottom: calc(26px + 80px); }
   .affirm-big { font-size: 20px; }
   .punct-grid { grid-template-columns: 1fr; }
   .postpone-opts { grid-template-columns: 1fr 1fr; }
-  .look-picker { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .look-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .reader-card { padding: 20px 18px; }
   .reader h1 { font-size: 25px; }
   .week-strip { gap: 4px; }

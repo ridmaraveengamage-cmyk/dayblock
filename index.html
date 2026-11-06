@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="en" data-look="aurora" data-scheme="light">
+<html lang="en" data-look="classic" data-scheme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Dayblock</title>
   <meta name="description" content="Personal planner: time blocks, to-dos, goals, diary and time tracking.">
-  <meta name="theme-color" content="#f6f5ff">
+  <meta name="theme-color" content="#f5f6fa">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Dayblock">
   <link rel="manifest" href="manifest.webmanifest">
@@ -15,7 +15,7 @@
     // Apply the saved look before the page paints (avoids a flash of the wrong colors).
     try {
       var l = JSON.parse(localStorage.getItem('dayblock:look') || '{}');
-      var look = ['aurora', 'midnight', 'paper'].indexOf(l.look) >= 0 ? l.look : 'aurora';
+      var look = ['classic', 'aurora', 'midnight', 'paper'].indexOf(l.look) >= 0 ? l.look : 'classic';
       var mode = l.mode || 'auto';
       var dark = mode === 'dark' || (mode === 'auto' ? (look === 'midnight' ? !matchMedia('(prefers-color-scheme: light)').matches : matchMedia('(prefers-color-scheme: dark)').matches) : false);
       document.documentElement.dataset.look = look;
@@ -25,7 +25,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap">
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body data-auth="loading">
   <!-- ============ Sign in / sign up ============ -->
@@ -415,6 +415,7 @@
       <section class="settings-group">
         <h3>Look</h3>
         <div class="look-picker" id="s-look" role="radiogroup" aria-label="Look">
+          <label class="look-opt"><input type="radio" name="look" value="classic"><span><span class="look-swatch classic"><i></i><i></i><i></i></span><span class="look-name">Classic<small>Original</small></span></span></label>
           <label class="look-opt"><input type="radio" name="look" value="aurora"><span><span class="look-swatch aurora"><i></i><i></i><i></i></span><span class="look-name">Aurora<small>Soft glass</small></span></span></label>
           <label class="look-opt"><input type="radio" name="look" value="midnight"><span><span class="look-swatch midnight"><i></i><i></i><i></i></span><span class="look-name">Midnight<small>Dark glow</small></span></span></label>
           <label class="look-opt"><input type="radio" name="look" value="paper"><span><span class="look-swatch paper"><i></i><i></i><i></i></span><span class="look-name">Paper<small>Warm ink</small></span></span></label>
@@ -464,8 +465,8 @@
   <div id="tooltip" class="chart-tip" role="tooltip" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="learn-content.js?v=7"></script>
-  <script src="app.js?v=7"></script>
-  <script type="module" src="auth.js?v=7"></script>
+  <script src="learn-content.js?v=8"></script>
+  <script src="app.js?v=8"></script>
+  <script type="module" src="auth.js?v=8"></script>
 </body>
 </html>

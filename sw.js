@@ -1,6 +1,6 @@
 // Offline support: try the network first, fall back to the cached copy.
-const CACHE = 'dayblock-v7';
-const ASSETS = ['./', './index.html', './styles.css?v=7', './learn-content.js?v=7', './app.js?v=7', './auth.js?v=7', './firebase-config.js?v=7', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'dayblock-v8';
+const ASSETS = ['./', './index.html', './styles.css?v=8', './learn-content.js?v=8', './app.js?v=8', './auth.js?v=8', './firebase-config.js?v=8', './manifest.webmanifest', './icon.svg'];
 // App files, Firebase SDK scripts and Google Fonts.
 const CACHEABLE_HOSTS = [self.location.host, 'www.gstatic.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 

@@ -30,7 +30,7 @@
     learn: [['guide', 'How to use'], ['lessons', 'Lessons']],
   };
   const LIST_VIEWS = ['list', 'board', 'goals', 'feed', 'guide', 'lessons']; // views without date navigation
-  const LOOKS = ['aurora', 'midnight', 'paper'];
+  const LOOKS = ['classic', 'aurora', 'midnight', 'paper'];
   const LIFE_AREAS = [
     { id: 'health', name: 'Health', emoji: '💪', color: '#10b981' },
     { id: 'career', name: 'Career', emoji: '💼', color: '#6366f1' },
@@ -184,7 +184,7 @@
   // ---------- State & storage ----------
   const defaultSettings = {
     mode: 'timeblock', tbView: 'day', todoView: 'list', insView: 'week', visView: 'board', diaryView: 'feed', learnView: 'guide',
-    dayStart: 0, dayEnd: 24, weekStart: 1, theme: 'auto', look: 'aurora', chainMode: 'ask', fullDay: true,
+    dayStart: 0, dayEnd: 24, weekStart: 1, theme: 'auto', look: 'classic', lookChosen: false, chainMode: 'ask', fullDay: true,
   };
   const arrOf = x => (Array.isArray(x) ? x : []);
   const isHex = c => /^#[0-9a-f]{6}$/i.test(c || '');
@@ -275,7 +275,8 @@
     if (!VIEWS.diary.some(v => v[0] === s.diaryView)) s.diaryView = 'feed';
     if (!VIEWS.learn.some(v => v[0] === s.learnView)) s.learnView = 'guide';
     if (!['auto', 'light', 'dark'].includes(s.theme)) s.theme = 'auto';
-    if (!LOOKS.includes(s.look)) s.look = 'aurora';
+    // The original design (Classic) is the default until someone picks another look in Settings.
+    if (!LOOKS.includes(s.look) || !s.lookChosen) s.look = 'classic';
     if (!['ask', 'auto'].includes(s.chainMode)) s.chainMode = 'ask';
     const categories = normalizeCategories(d?.categories);
     const CAT_IDS = categories.map(c => c.id);
@@ -507,7 +508,7 @@
   }
 
   function addTask({ title, priority = 'med', due = '', repeat = null, category = 'work', estimate = 0 }) {
-    const t = { id: uid(), title: title.trim(), notes: '', priority, due, done: false, created: Date.now(), repeat: normRepeat(repeat), category, estimate };
+    const t = { id: uid(), title: title.trim(), notes: '', priority, due, done: false, created: Date.now(), repeat: normRepeat(repeat), category, estimate, after: '', postponed: [] };
     state.tasks.push(t);
     save();
     return t;
@@ -1310,7 +1311,7 @@
             ${(() => { const ms = milestoneForTask(t.id); return ms ? `<span class="pill" title="Step of a life goal">🎯 ${esc(ms.g.title)}</span>` : ''; })()}
             ${(() => { const p = t.after && findTask(t.after); return p ? `<span class="pill link" title="Starts after this task">🔗 After: ${esc(p.title)}${p.done ? ' ✓' : ''}</span>` : ''; })()}
             ${(() => { const n = successorsOf(t.id).length; return n ? `<span class="pill link" title="Tasks waiting for this one">→ ${n} waiting</span>` : ''; })()}
-            ${t.postponed.length ? `<span class="pill warn" title="${esc(t.postponed.map(p => `${p.from} → ${p.to}${p.reason ? ' (' + p.reason + ')' : ''}`).join('\n'))}">↷ Postponed ${t.postponed.length}×</span>` : ''}
+            ${t.postponed?.length ? `<span class="pill warn" title="${esc(t.postponed.map(p => `${p.from} → ${p.to}${p.reason ? ' (' + p.reason + ')' : ''}`).join('\n'))}">↷ Postponed ${t.postponed.length}×</span>` : ''}
             ${t.notes ? '<span class="pill">Notes</span>' : ''}
           </span>
         </button>
@@ -1347,7 +1348,7 @@
       active: active.length,
       today: active.filter(t => t.due && t.due <= today).length,
       linked: active.filter(isLinked).length,
-      postponed: active.filter(t => t.postponed.length).length,
+      postponed: active.filter(t => t.postponed?.length).length,
       done: state.tasks.length - active.length,
     };
     filtersEl.querySelectorAll('[data-filter]').forEach(b => {
@@ -1360,7 +1361,7 @@
     let list = state.tasks;
     if (todoFilter === 'active') list = active;
     else if (todoFilter === 'today') list = active.filter(t => t.due && t.due <= today);
-    else if (todoFilter === 'postponed') list = active.filter(t => t.postponed.length).sort((a, b) => b.postponed.length - a.postponed.length);
+    else if (todoFilter === 'postponed') list = active.filter(t => t.postponed?.length).sort((a, b) => b.postponed.length - a.postponed.length);
     else if (todoFilter === 'done') list = list.filter(t => t.done);
     const empty = {
       active: ['Nothing on your list', 'Add a task above to get started.'],
@@ -1672,7 +1673,7 @@
 
     // 3) Postponements made in this period.
     const pps = [];
-    for (const t of state.tasks) for (const p of t.postponed) if (p.at >= fromTs && p.at < toTs) pps.push({ ...p, title: t.title, key: 'task:' + t.id });
+    for (const t of state.tasks) for (const p of (t.postponed || [])) if (p.at >= fromTs && p.at < toTs) pps.push({ ...p, title: t.title, key: 'task:' + t.id });
     for (const bl of state.blocks) for (const p of (bl.postponed || [])) if (p.at >= fromTs && p.at < toTs) pps.push({ ...p, title: bl.title, key: 'block:' + bl.id });
     let ppCard = '';
     const topItems = Object.values(pps.reduce((acc, p) => { (acc[p.key] ||= { title: p.title, n: 0 }).n++; return acc; }, {})).sort((x, y) => y.n - x.n);
@@ -2881,7 +2882,7 @@
     $('#t-after').innerHTML = '<option value="">Nothing, it can start any time</option>' +
       choices.map(x => `<option value="${esc(x.id)}"${x.id === t.after ? ' selected' : ''}>${esc(x.title)}${taskDate(x) ? ` (${esc(fmtShortDate(taskDate(x)))})` : ''}</option>`).join('');
     $('#t-history').innerHTML = historyHTML(t.postponed);
-    $('#t-history').hidden = !t.postponed.length;
+    $('#t-history').hidden = !t.postponed?.length;
     $('#t-postpone').hidden = t.done;
     taskDialog.showModal();
   }
@@ -3031,6 +3032,7 @@
   $('#s-look').addEventListener('change', e => {
     if (!e.target.matches('input[name="look"]')) return;
     state.settings.look = e.target.value;
+    state.settings.lookChosen = true;
     save();
     applyTheme();
     renderAll();

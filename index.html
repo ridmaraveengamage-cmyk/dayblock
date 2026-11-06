@@ -1,26 +1,40 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-look="aurora" data-scheme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Dayblock</title>
-  <meta name="description" content="Personal planner with time blocking, to-do lists, recurring tasks and time tracking.">
-  <meta name="theme-color" content="#f5f6fa">
+  <meta name="description" content="Personal planner: time blocks, to-dos, goals, diary and time tracking.">
+  <meta name="theme-color" content="#f6f5ff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Dayblock">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <script>
+    // Apply the saved look before the page paints (avoids a flash of the wrong colors).
+    try {
+      var l = JSON.parse(localStorage.getItem('dayblock:look') || '{}');
+      var look = ['aurora', 'midnight', 'paper'].indexOf(l.look) >= 0 ? l.look : 'aurora';
+      var mode = l.mode || 'auto';
+      var dark = mode === 'dark' || (mode === 'auto' ? (look === 'midnight' ? !matchMedia('(prefers-color-scheme: light)').matches : matchMedia('(prefers-color-scheme: dark)').matches) : false);
+      document.documentElement.dataset.look = look;
+      document.documentElement.dataset.scheme = dark ? 'dark' : 'light';
+    } catch (e) {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body data-auth="loading">
   <!-- ============ Sign in / sign up ============ -->
   <div class="auth-screen" id="auth-screen">
     <div class="auth-card">
       <div class="auth-brand">
-        <img src="icon.svg" alt="" width="52" height="52">
+        <span class="logo"><i></i></span>
         <h1>Dayblock</h1>
-        <p>Plan your days with time blocks and to-dos, and see where your time really goes.</p>
+        <p>Plan your days, track your time, grow your life.</p>
       </div>
       <div class="auth-loading" id="auth-loading"><span class="spinner" aria-hidden="true"></span>Loading…</div>
       <div class="auth-forms" id="auth-forms">
@@ -51,102 +65,140 @@
   </div>
 
   <!-- ============ App ============ -->
-  <header class="topbar">
-    <div class="brand"><img src="icon.svg" alt="" width="28" height="28"><span>Dayblock</span></div>
-    <div class="seg mode-switch" role="tablist" aria-label="Section">
-      <button type="button" role="tab" data-mode="timeblock" aria-selected="true"><span class="lbl-full">Time blocks</span><span class="lbl-short">Blocks</span></button>
-      <button type="button" role="tab" data-mode="todo" aria-selected="false">To-do</button>
-      <button type="button" role="tab" data-mode="insights" aria-selected="false">Insights</button>
-      <button type="button" role="tab" data-mode="vision" aria-selected="false">Vision</button>
-    </div>
-    <button type="button" class="icon-btn account-btn" id="settings-btn" aria-label="Settings and account" title="Settings and account">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.820l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-    </button>
-  </header>
-
-  <main>
-    <!-- Shared toolbar: date navigation + Day / Week / Month -->
-    <div class="toolbar">
-      <div class="nav-group">
-        <button type="button" class="icon-btn" id="prev-btn" aria-label="Previous" title="Previous (←)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-        </button>
-        <button type="button" class="icon-btn" id="next-btn" aria-label="Next" title="Next (→)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </button>
-        <button type="button" class="period-label" id="period-label" title="Pick a date">
-          <h1 id="period-title">Today</h1>
-          <span id="period-sub"></span>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="logo"><i></i></span>Dayblock</div>
+      <nav class="app-nav" role="tablist" aria-label="Sections">
+        <button type="button" role="tab" data-mode="timeblock" aria-selected="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>
+          <span class="nav-full">Time blocks</span><span class="nav-short">Blocks</span></button>
+        <button type="button" role="tab" data-mode="todo" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11 3 3 8-8"/><path d="M20 12v6a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h9"/></svg>
+          <span class="nav-full">To-do</span><span class="nav-short">To-do</span></button>
+        <button type="button" role="tab" data-mode="insights" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+          <span class="nav-full">Insights</span><span class="nav-short">Insights</span></button>
+        <button type="button" role="tab" data-mode="vision" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.5 5.5L20 9.5l-4 4 1 5.5-5-2.8L7 19l1-5.5-4-4 5.5-1z"/></svg>
+          <span class="nav-full">Vision</span><span class="nav-short">Vision</span></button>
+        <button type="button" role="tab" data-mode="diary" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M4 21.5A2.5 2.5 0 0 1 6.5 19H20v3H6.5"/><path d="M12 7.5c-1.2-1.5-4 -.6-3 1.6.7 1.4 3 2.9 3 2.9s2.3-1.5 3-2.9c1-2.2-1.8-3.1-3-1.6z"/></svg>
+          <span class="nav-full">Diary</span><span class="nav-short">Diary</span></button>
+        <button type="button" role="tab" data-mode="learn" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 9 12 4 2 9l10 5 10-5z"/><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>
+          <span class="nav-full">Learn</span><span class="nav-short">Learn</span></button>
+      </nav>
+      <div class="side-foot">
+        <div class="side-quote" id="side-quote" hidden></div>
+        <button type="button" class="side-user" id="settings-btn" aria-label="Settings and account" title="Settings and account">
+          <span class="gear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+          <span class="side-who"><b>Settings</b><small>This device only</small></span>
         </button>
       </div>
-      <div class="toolbar-right">
-        <button type="button" class="btn" id="today-btn">Today</button>
-        <input type="date" id="day-picker" aria-label="Pick a date">
-        <div class="seg view-switch" id="view-switch" role="tablist" aria-label="View"></div>
-      </div>
-    </div>
+    </aside>
 
-    <!-- ============ Time blocks ============ -->
-    <section id="view-timeblock" class="view">
-      <div class="tb-layout">
-        <aside class="tb-side">
-          <div class="card summary" id="period-summary"></div>
-          <div class="card">
-            <div class="card-head"><h2>Tasks to schedule</h2></div>
-            <form id="quick-task" class="quick-task" autocomplete="off">
-              <input type="text" id="quick-task-input" placeholder="Add a task…" maxlength="200" aria-label="New task">
-              <button type="submit" class="btn">Add</button>
-            </form>
-            <ul id="unscheduled" class="mini-tasks"></ul>
-            <p class="hint">Drag a task onto the timeline, or press <b>+</b> to drop it into the next free slot.</p>
+    <div class="content">
+      <main>
+        <!-- Shared toolbar: date navigation + view switch -->
+        <div class="toolbar">
+          <div class="nav-group">
+            <button type="button" class="icon-btn" id="prev-btn" aria-label="Previous" title="Previous (←)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <button type="button" class="icon-btn" id="next-btn" aria-label="Next" title="Next (→)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <button type="button" class="period-label" id="period-label" title="Pick a date">
+              <h1 id="period-title">Today</h1>
+              <span id="period-sub"></span>
+            </button>
           </div>
-        </aside>
-        <div class="tb-main" id="tb-main"></div>
-      </div>
-    </section>
-
-    <!-- ============ To-do ============ -->
-    <section id="view-todo" class="view" hidden>
-      <form id="todo-form" class="card todo-form" autocomplete="off">
-        <input type="text" id="todo-title" placeholder="What needs doing?" maxlength="200" aria-label="New task" required>
-        <div class="todo-form-opts">
-          <select id="todo-priority" aria-label="Priority">
-            <option value="high">High priority</option>
-            <option value="med" selected>Medium priority</option>
-            <option value="low">Low priority</option>
-          </select>
-          <input type="date" id="todo-due" aria-label="Due date">
-          <select id="todo-repeat" aria-label="Repeat">
-            <option value="">Doesn't repeat</option>
-            <option value="daily">Daily</option>
-            <option value="weekdays">Every weekday</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-          </select>
-          <button class="btn primary" type="submit">Add task</button>
+          <div class="toolbar-right">
+            <button type="button" class="btn" id="today-btn">Today</button>
+            <input type="date" id="day-picker" aria-label="Pick a date">
+            <div class="seg view-switch" id="view-switch" role="tablist" aria-label="View"></div>
+          </div>
         </div>
-      </form>
-      <div class="filters" id="filters" hidden>
-        <button type="button" class="chip" data-filter="active">Active<span class="count"></span></button>
-        <button type="button" class="chip" data-filter="today">Due today<span class="count"></span></button>
-        <button type="button" class="chip" data-filter="done">Done<span class="count"></span></button>
-        <button type="button" class="chip" data-filter="all">All<span class="count"></span></button>
-        <span class="spacer"></span>
-        <button type="button" class="btn sm" id="clear-done">Clear completed</button>
-      </div>
-      <div id="todo-content"></div>
-    </section>
 
-    <!-- ============ Insights ============ -->
-    <section id="view-insights" class="view" hidden>
-      <div id="insights-content"></div>
-    </section>
+        <div id="chain-banner"></div>
 
-    <!-- ============ Vision: manifestation, life planning, goals ============ -->
-    <section id="view-vision" class="view" hidden>
-      <div id="vision-content" class="vision"></div>
-    </section>
-  </main>
+        <!-- ============ Time blocks ============ -->
+        <section id="view-timeblock" class="view">
+          <div id="tb-strip"></div>
+          <div class="tb-layout">
+            <aside class="tb-side">
+              <div class="card summary" id="period-summary"></div>
+              <div class="card">
+                <div class="card-head"><h2>Tasks to schedule</h2></div>
+                <form id="quick-task" class="quick-task" autocomplete="off">
+                  <input type="text" id="quick-task-input" placeholder="Add a task…" maxlength="200" aria-label="New task">
+                  <button type="submit" class="btn">Add</button>
+                </form>
+                <ul id="unscheduled" class="mini-tasks"></ul>
+                <p class="hint">Drag a task onto the timeline, or press <b>+</b> to drop it into the next free slot.</p>
+              </div>
+            </aside>
+            <div class="tb-main" id="tb-main"></div>
+          </div>
+        </section>
+
+        <!-- ============ To-do ============ -->
+        <section id="view-todo" class="view" hidden>
+          <form id="todo-form" class="card todo-form" autocomplete="off">
+            <input type="text" id="todo-title" placeholder="What needs doing?" maxlength="200" aria-label="New task" required>
+            <div class="todo-form-opts">
+              <select id="todo-priority" aria-label="Priority">
+                <option value="high">High priority</option>
+                <option value="med" selected>Medium priority</option>
+                <option value="low">Low priority</option>
+              </select>
+              <input type="date" id="todo-due" aria-label="Due date">
+              <select id="todo-repeat" aria-label="Repeat">
+                <option value="">Doesn't repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekdays">Every weekday</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+              <button class="btn primary" type="submit">Add task</button>
+            </div>
+          </form>
+          <div id="todo-strip"></div>
+          <div class="filters" id="filters" hidden>
+            <button type="button" class="chip" data-filter="active">Active<span class="count"></span></button>
+            <button type="button" class="chip" data-filter="today">Due today<span class="count"></span></button>
+            <button type="button" class="chip" data-filter="linked">Linked<span class="count"></span></button>
+            <button type="button" class="chip" data-filter="postponed">Postponed<span class="count"></span></button>
+            <button type="button" class="chip" data-filter="done">Done<span class="count"></span></button>
+            <button type="button" class="chip" data-filter="all">All<span class="count"></span></button>
+            <span class="spacer"></span>
+            <button type="button" class="btn sm" id="clear-done">Clear completed</button>
+          </div>
+          <div id="todo-content"></div>
+        </section>
+
+        <!-- ============ Insights ============ -->
+        <section id="view-insights" class="view" hidden>
+          <div id="insights-content"></div>
+        </section>
+
+        <!-- ============ Vision ============ -->
+        <section id="view-vision" class="view" hidden>
+          <div id="vision-content" class="vision"></div>
+        </section>
+
+        <!-- ============ Diary ============ -->
+        <section id="view-diary" class="view" hidden>
+          <div id="diary-content"></div>
+        </section>
+
+        <!-- ============ Learn ============ -->
+        <section id="view-learn" class="view" hidden>
+          <div id="learn-content"></div>
+        </section>
+      </main>
+    </div>
+  </div>
 
   <!-- Running timer -->
   <div class="timer-bar" id="timer-bar" hidden role="region" aria-label="Time tracker">
@@ -155,7 +207,7 @@
       <span class="timer-title" id="timer-title"></span>
       <span class="timer-sub" id="timer-sub"></span>
     </div>
-    <span class="timer-clock" id="timer-clock">0:00</span>
+    <span class="timer-clock" id="timer-clock" title="Time tracked">0:00</span>
     <button type="button" class="btn sm" id="timer-toggle">Pause</button>
     <button type="button" class="btn sm primary" id="timer-stop" title="Stop tracking and mark complete">Stop</button>
   </div>
@@ -185,9 +237,11 @@
       <div class="repeat-editor" id="b-repeat"></div>
       <label class="field"><span>Notes</span><textarea id="b-notes" rows="2" placeholder="Optional"></textarea></label>
       <div class="track-row" id="b-track" hidden></div>
+      <div class="history" id="b-history" hidden></div>
       <p class="form-error" id="b-error" hidden></p>
       <footer class="dialog-foot">
         <button type="button" class="btn danger" id="b-delete">Delete</button>
+        <button type="button" class="btn" id="b-postpone">↷ Postpone</button>
         <span class="spacer"></span>
         <button type="button" class="btn" data-close>Cancel</button>
         <button type="submit" class="btn primary">Save</button>
@@ -218,16 +272,55 @@
           </select>
         </label>
       </div>
+      <label class="field"><span>🔗 Starts after (linked task)</span>
+        <select id="t-after"></select>
+        <span class="help">If the task it depends on runs late or is postponed, this one moves with it.</span>
+      </label>
       <fieldset class="field"><legend>Category</legend><div class="cat-picker" id="t-cat"></div></fieldset>
       <div class="repeat-editor" id="t-repeat"></div>
       <label class="field"><span>Notes</span><textarea id="t-notes" rows="2" placeholder="Optional"></textarea></label>
       <div class="track-row" id="t-track"></div>
+      <div class="history" id="t-history" hidden></div>
       <p class="form-error" id="t-error" hidden></p>
       <footer class="dialog-foot">
         <button type="button" class="btn danger" id="t-delete">Delete</button>
+        <button type="button" class="btn" id="t-postpone">↷ Postpone</button>
         <span class="spacer"></span>
         <button type="button" class="btn" data-close>Cancel</button>
         <button type="submit" class="btn primary">Save</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ============ Postpone dialog ============ -->
+  <dialog id="postpone-dialog" aria-labelledby="pp-title" class="small-dialog">
+    <form id="postpone-form" class="dialog-form" novalidate>
+      <header class="dialog-head">
+        <h2 id="pp-title">Postpone</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+      <p class="muted small" id="pp-what"></p>
+      <div class="postpone-opts" id="pp-opts"></div>
+      <label class="field"><span>Or pick a date</span><input type="date" id="pp-date"></label>
+      <label class="field"><span>Why? (optional, helps your insights)</span>
+        <select id="pp-reason">
+          <option value="">No reason</option>
+          <option>Ran out of time</option>
+          <option>Something urgent came up</option>
+          <option>Waiting on someone</option>
+          <option>Low energy</option>
+          <option>Not important right now</option>
+          <option>Underestimated the task</option>
+        </select>
+      </label>
+      <div class="chain-note" id="pp-chain" hidden></div>
+      <p class="form-error" id="pp-error" hidden></p>
+      <footer class="dialog-foot">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn primary">Postpone</button>
       </footer>
     </form>
   </dialog>
@@ -254,6 +347,40 @@
         <span class="spacer"></span>
         <button type="button" class="btn" data-close>Cancel</button>
         <button type="submit" class="btn primary">Save</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ============ Diary entry dialog ============ -->
+  <dialog id="diary-dialog" aria-labelledby="dd-title" class="wide-dialog">
+    <form id="diary-form" class="dialog-form" novalidate>
+      <header class="dialog-head">
+        <h2 id="dd-title">New memory</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+      <div class="field-row">
+        <label class="field"><span>Title</span><input type="text" id="dd-name" maxlength="140" placeholder="A day to remember…" autocomplete="off"></label>
+        <label class="field"><span>Date</span><input type="date" id="dd-date"></label>
+        <label class="field"><span>Mood</span><select id="dd-mood"></select></label>
+      </div>
+      <label class="field"><span>What happened?</span><textarea id="dd-text" rows="7" placeholder="Write about your day, a moment, a feeling, a memory you want to keep…"></textarea></label>
+      <div class="field">
+        <span>Photos, videos and files</span>
+        <label class="dropzone" id="dd-drop">
+          <input type="file" id="dd-files" multiple hidden accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
+          Drop files here or <b>browse</b>
+        </label>
+        <div class="attach-preview" id="dd-preview"></div>
+        <span class="storage-note" id="dd-storage"></span>
+      </div>
+      <p class="form-error" id="dd-error" hidden></p>
+      <footer class="dialog-foot">
+        <button type="button" class="btn danger" id="dd-delete">Delete</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn primary" id="dd-save">Save memory</button>
       </footer>
     </form>
   </dialog>
@@ -286,17 +413,34 @@
         <div id="account-box" class="account-box"></div>
       </section>
       <section class="settings-group">
+        <h3>Look</h3>
+        <div class="look-picker" id="s-look" role="radiogroup" aria-label="Look">
+          <label class="look-opt"><input type="radio" name="look" value="aurora"><span><span class="look-swatch aurora"><i></i><i></i><i></i></span><span class="look-name">Aurora<small>Soft glass</small></span></span></label>
+          <label class="look-opt"><input type="radio" name="look" value="midnight"><span><span class="look-swatch midnight"><i></i><i></i><i></i></span><span class="look-name">Midnight<small>Dark glow</small></span></span></label>
+          <label class="look-opt"><input type="radio" name="look" value="paper"><span><span class="look-swatch paper"><i></i><i></i><i></i></span><span class="look-name">Paper<small>Warm ink</small></span></span></label>
+        </div>
+        <label class="field"><span>Light or dark</span>
+          <select id="s-theme"><option value="auto">Match my device</option><option value="light">Light</option><option value="dark">Dark</option></select>
+        </label>
+      </section>
+      <section class="settings-group">
+        <h3>Categories</h3>
+        <div class="cat-editor" id="s-cats"></div>
+        <form class="inline-form" id="s-cat-add" autocomplete="off">
+          <input type="color" id="s-cat-color" value="#14b8a6" aria-label="New category color">
+          <input type="text" id="s-cat-name" maxlength="30" placeholder="New category, e.g. Side project" aria-label="New category name">
+          <button type="submit" class="btn">Add</button>
+        </form>
+      </section>
+      <section class="settings-group">
         <h3>Calendar</h3>
         <div class="field-row">
           <label class="field"><span>Day starts</span><select id="s-start"></select></label>
           <label class="field"><span>Day ends</span><select id="s-end"></select></label>
           <label class="field"><span>Week starts</span><select id="s-week"><option value="1">Monday</option><option value="0">Sunday</option></select></label>
         </div>
-      </section>
-      <section class="settings-group">
-        <h3>Appearance</h3>
-        <label class="field"><span>Theme</span>
-          <select id="s-theme"><option value="auto">Match system</option><option value="light">Light</option><option value="dark">Dark</option></select>
+        <label class="field"><span>When a linked task runs late</span>
+          <select id="s-chain"><option value="ask">Ask me what to do</option><option value="auto">Push the whole chain to the next day automatically</option></select>
         </label>
       </section>
       <section class="settings-group">
@@ -306,6 +450,7 @@
           <label class="btn" tabindex="0">Import backup<input type="file" id="import-input" accept="application/json,.json" hidden></label>
           <button type="button" class="btn danger" id="reset-btn">Erase all</button>
         </div>
+        <p class="muted small">Backups include your plans, goals and diary text. Photos and videos stay in the app.</p>
       </section>
       <section class="settings-group" id="install-group" hidden>
         <h3>App</h3>
@@ -315,10 +460,12 @@
     </div>
   </dialog>
 
+  <div id="lightbox" class="lightbox" hidden></div>
   <div id="tooltip" class="chart-tip" role="tooltip" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=6"></script>
-  <script type="module" src="auth.js?v=6"></script>
+  <script src="learn-content.js?v=7"></script>
+  <script src="app.js?v=7"></script>
+  <script type="module" src="auth.js?v=7"></script>
 </body>
 </html>

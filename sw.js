@@ -1,7 +1,8 @@
 // Offline support: try the network first, fall back to the cached copy.
-const CACHE = 'dayblock-v6';
-const ASSETS = ['./', './index.html', './styles.css?v=6', './app.js?v=6', './auth.js?v=6', './firebase-config.js?v=6', './manifest.webmanifest', './icon.svg'];
-const CACHEABLE_HOSTS = [self.location.host, 'www.gstatic.com']; // app files + Firebase SDK scripts
+const CACHE = 'dayblock-v7';
+const ASSETS = ['./', './index.html', './styles.css?v=7', './learn-content.js?v=7', './app.js?v=7', './auth.js?v=7', './firebase-config.js?v=7', './manifest.webmanifest', './icon.svg'];
+// App files, Firebase SDK scripts and Google Fonts.
+const CACHEABLE_HOSTS = [self.location.host, 'www.gstatic.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
@@ -22,7 +23,7 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fresh
       .then(res => {
-        if (res.ok) {
+        if (res.ok || res.type === 'opaque') {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(req, copy));
         }

@@ -1,6 +1,6 @@
 // Sign-in (Google + email/password) and cloud sync via Firebase.
 // Without a Firebase config the app runs in "this device only" mode.
-import { firebaseConfig } from './firebase-config.js?v=6';
+import { firebaseConfig } from './firebase-config.js?v=7';
 
 const App = window.DayblockApp;
 const FB_VERSION = '10.12.2';
@@ -151,8 +151,10 @@ const SYNC_TEXT = {
   offline: ['busy', 'Offline — will sync when back online'], error: ['err', 'Sync problem — changes are kept on this device'],
 };
 
+// Sidebar account button: avatar + name + sync status (desktop), avatar only on phones.
 const settingsBtn = $('#settings-btn');
-const gearHTML = settingsBtn.innerHTML;
+const gearHTML = settingsBtn.querySelector('.gear').outerHTML;
+const SYNC_SHORT = { idle: 'Connecting…', syncing: 'Saving…', synced: 'Synced', offline: 'Offline', error: 'Sync problem' };
 
 function renderAccount() {
   const box = $('#account-box');
@@ -163,11 +165,11 @@ function renderAccount() {
       <div class="who"><b>${esc(u.displayName || 'Signed in')}</b><span>${esc(u.email || '')}</span><br>
         <span><i class="sync-dot ${cls}"></i>${esc(text)}</span></div>
       <button type="button" class="btn" id="signout-btn">Sign out</button>`;
-    settingsBtn.innerHTML = avatarHTML(u, 30);
+    settingsBtn.innerHTML = `${avatarHTML(u, 34)}<span class="side-who"><b>${esc(u.displayName || u.email || 'Account')}</b><small><i class="sync-dot ${cls}"></i>${esc(SYNC_SHORT[syncState])} · Settings</small></span>`;
   } else {
     box.innerHTML = `<div class="who"><b>Not signed in</b><span>Your plans are saved on this device only.</span></div>
       <button type="button" class="btn primary" id="signin-btn">Sign in or create account</button>`;
-    settingsBtn.innerHTML = gearHTML;
+    settingsBtn.innerHTML = `${gearHTML}<span class="side-who"><b>Settings</b><small>This device only</small></span>`;
   }
 }
 
@@ -223,8 +225,36 @@ function merge(a, b) {
     blocks: byId(older.blocks, newer.blocks),
     tasks: byId(older.tasks, newer.tasks),
     entries: byId(older.entries, newer.entries),
+    diary: byId(older.diary, newer.diary),
+    categories: byId(older.categories, newer.categories),
     updatedAt: Date.now(),
   };
+}
+
+// ---------- Diary photo sync ----------
+// Photos are shrunk to under ~900 KB and stored as their own documents (users/{uid}/media/{id}).
+// Videos and other files stay on the device: the free Firebase plan has no file storage.
+function mediaDoc(id) { return fb.F.doc(fb.db, 'users', user.uid, 'media', id); }
+const blobToDataUrl = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+function enableMediaSync() {
+  App.setRemoteMedia({
+    fetch: async id => { const s = await fb.F.getDoc(mediaDoc(id)); return s.exists() ? s.data().data : null; },
+    upload: (id, dataUrl, meta) => fb.F.setDoc(mediaDoc(id), { data: dataUrl, name: meta.name || '', mime: meta.mime || 'image/jpeg', created: Date.now() }),
+    remove: id => fb.F.deleteDoc(mediaDoc(id)).catch(() => {}),
+  });
+  // Upload photos that were added while signed out (or on a device that went offline).
+  setTimeout(async () => {
+    if (!user) return;
+    const photos = await App.pendingPhotos();
+    for (const m of photos.slice(0, 60)) {
+      try {
+        const blob = await App.getMediaBlob(m.id);
+        if (!blob) continue;
+        const s = await fb.F.getDoc(mediaDoc(m.id));
+        if (!s.exists()) await fb.F.setDoc(mediaDoc(m.id), { data: await blobToDataUrl(blob), name: m.name, mime: m.mime, created: Date.now() });
+      } catch (err) { console.warn('Photo sync skipped', err); }
+    }
+  }, 4000);
 }
 
 function onSignedIn(u) {
@@ -234,6 +264,7 @@ function onSignedIn(u) {
   const { seeded } = App.switchStore(`dayblock:u:${u.uid}`, { seed: fromGuest });
   setAuthState('in');
   setSync('idle');
+  enableMediaSync();
   let first = true;
   unsubDoc?.();
   unsubDoc = fb.F.onSnapshot(userDoc(), { includeMetadataChanges: false }, snap => {
@@ -270,6 +301,7 @@ function onSignedOut() {
   unsubDoc = null;
   user = null;
   syncState = 'idle';
+  App.setRemoteMedia(null);
   if (App.getStoreKey() !== App.GUEST_KEY) App.switchStore(App.GUEST_KEY);
   setAuthState(isGuest() ? 'guest' : 'signedout');
   renderAccount();

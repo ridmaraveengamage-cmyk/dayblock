@@ -1,8 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Each signed-in user can only read and write their own planner document.
-    match /users/{uid} {
+    // Each signed-in user can only read and write their own planner document
+    // and everything under it (e.g. diary photos in users/{uid}/media/{id}).
+    match /users/{uid}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
   }

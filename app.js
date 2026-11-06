@@ -8,15 +8,16 @@
   const HOUR_H = 64;   // pixel height of one hour; matches --hour-h in styles.css
   const SNAP = 15;     // minutes; drag and resize snap to this
   const TASK_MIME = 'application/x-dayblock-task';
-  const CATEGORIES = [
-    { id: 'work', name: 'Work' },
-    { id: 'personal', name: 'Personal' },
-    { id: 'health', name: 'Health' },
-    { id: 'learning', name: 'Learning' },
-    { id: 'break', name: 'Break' },
-    { id: 'other', name: 'Other' },
+  // Built-in categories (users can rename, recolor, delete and add their own in Settings).
+  const DEFAULT_CATEGORIES = [
+    { id: 'work', name: 'Work', color: '#6366f1' },
+    { id: 'personal', name: 'Personal', color: '#d946ef' },
+    { id: 'health', name: 'Health', color: '#10b981' },
+    { id: 'learning', name: 'Learning', color: '#f97316' },
+    { id: 'break', name: 'Break', color: '#0ea5e9' },
+    { id: 'other', name: 'Other', color: '#64748b' },
   ];
-  const CAT_IDS = CATEGORIES.map(c => c.id);
+  const CAT_SWATCHES = ['#6366f1', '#8b5cf6', '#d946ef', '#ec4899', '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#14b8a6', '#0ea5e9', '#64748b'];
   const PRIORITIES = { high: 'High', med: 'Medium', low: 'Low' };
   const PRIORITY_RANK = { high: 0, med: 1, low: 2 };
   const REPEAT_FREQS = { daily: 'Daily', weekdays: 'Every weekday', weekly: 'Weekly', monthly: 'Monthly' };
@@ -25,18 +26,21 @@
     todo: [['list', 'List'], ['day', 'Day'], ['week', 'Week'], ['month', 'Month']],
     insights: [['day', 'Day'], ['week', 'Week'], ['month', 'Month']],
     vision: [['board', 'Vision'], ['goals', 'Goals'], ['journal', 'Journal']],
+    diary: [['feed', 'Memories'], ['month', 'Calendar']],
+    learn: [['guide', 'How to use'], ['lessons', 'Lessons']],
   };
-  const LIST_VIEWS = ['list', 'board', 'goals']; // views without date navigation
+  const LIST_VIEWS = ['list', 'board', 'goals', 'feed', 'guide', 'lessons']; // views without date navigation
+  const LOOKS = ['aurora', 'midnight', 'paper'];
   const LIFE_AREAS = [
-    { id: 'health', name: 'Health', emoji: '💪', cat: 'health' },
-    { id: 'career', name: 'Career', emoji: '💼', cat: 'work' },
-    { id: 'money', name: 'Money', emoji: '💰', cat: 'learning' },
-    { id: 'love', name: 'Love', emoji: '❤️', cat: 'personal' },
-    { id: 'family', name: 'Family & friends', emoji: '🤝', cat: 'break' },
-    { id: 'growth', name: 'Growth', emoji: '🌱', cat: 'health' },
-    { id: 'fun', name: 'Fun', emoji: '🎉', cat: 'personal' },
-    { id: 'purpose', name: 'Purpose', emoji: '✨', cat: 'other' },
-  ];
+    { id: 'health', name: 'Health', emoji: '💪', color: '#10b981' },
+    { id: 'career', name: 'Career', emoji: '💼', color: '#6366f1' },
+    { id: 'money', name: 'Money', emoji: '💰', color: '#f59e0b' },
+    { id: 'love', name: 'Love', emoji: '❤️', color: '#ec4899' },
+    { id: 'family', name: 'Family & friends', emoji: '🤝', color: '#0ea5e9' },
+    { id: 'growth', name: 'Growth', emoji: '🌱', color: '#22c55e' },
+    { id: 'fun', name: 'Fun', emoji: '🎉', color: '#a855f7' },
+    { id: 'purpose', name: 'Purpose', emoji: '✨', color: '#64748b' },
+  ].map(a => ({ ...a, cat: 'area-' + a.id }));
   const AREA_IDS = LIFE_AREAS.map(a => a.id);
   const areaOf = id => LIFE_AREAS.find(a => a.id === id) || LIFE_AREAS[5];
   const HORIZONS = [['life', 'Lifetime'], ['5y', 'In 5 years'], ['year', 'This year'], ['quarter', 'Next 90 days']];
@@ -108,6 +112,8 @@
     return null;
   }
   const dayLabel = iso => relDay(iso) || fmtShortDate(iso);
+  // Same, for use mid-sentence: "today" / "tomorrow" in lowercase, real dates untouched.
+  const dayLabelIn = iso => (relDay(iso) ? relDay(iso).toLowerCase() : fmtShortDate(iso));
 
   // ---------- Repeat rules ----------
   function normRepeat(r) {
@@ -176,7 +182,40 @@
   }
 
   // ---------- State & storage ----------
-  const defaultSettings = { mode: 'timeblock', tbView: 'day', todoView: 'list', insView: 'week', visView: 'board', dayStart: 0, dayEnd: 24, weekStart: 1, theme: 'auto', fullDay: true };
+  const defaultSettings = {
+    mode: 'timeblock', tbView: 'day', todoView: 'list', insView: 'week', visView: 'board', diaryView: 'feed', learnView: 'guide',
+    dayStart: 0, dayEnd: 24, weekStart: 1, theme: 'auto', look: 'aurora', chainMode: 'ask', fullDay: true,
+  };
+  const arrOf = x => (Array.isArray(x) ? x : []);
+  const isHex = c => /^#[0-9a-f]{6}$/i.test(c || '');
+  const normHistory = h => arrOf(h).filter(p => p && isISO(p.to)).map(p => ({ from: isISO(p.from) ? p.from : '', to: p.to, at: Number(p.at) || Date.now(), reason: String(p.reason || '') }));
+
+  function normalizeCategories(list) {
+    const out = [];
+    for (const c of arrOf(list)) {
+      if (!c || typeof c.id !== 'string' || !c.id || out.some(x => x.id === c.id)) continue;
+      out.push({ id: c.id.replace(/[^a-z0-9_-]/gi, ''), name: String(c.name || 'Untitled').slice(0, 30), color: isHex(c.color) ? c.color : '#64748b' });
+    }
+    if (!out.length) return DEFAULT_CATEGORIES.map(c => ({ ...c }));
+    if (!out.some(c => c.id === 'other')) out.push({ ...DEFAULT_CATEGORIES[5] });
+    return out;
+  }
+
+  function normalizeDiary(list) {
+    return arrOf(list).filter(e => e && e.id && isISO(e.date)).map(e => ({
+      id: String(e.id),
+      date: e.date,
+      title: String(e.title || ''),
+      text: String(e.text || ''),
+      mood: Number.isInteger(e.mood) && e.mood >= 0 && e.mood < MOODS.length ? e.mood : null,
+      fav: !!e.fav,
+      created: Number(e.created) || Date.now(),
+      media: arrOf(e.media).filter(m => m && m.id).map(m => ({
+        id: String(m.id), kind: ['image', 'video', 'audio', 'file'].includes(m.kind) ? m.kind : 'file',
+        name: String(m.name || 'file'), mime: String(m.mime || ''), size: Number(m.size) || 0, sync: !!m.sync,
+      })),
+    }));
+  }
 
   function normalizeVision(v) {
     v = v && typeof v === 'object' ? v : {};
@@ -233,7 +272,13 @@
     if (!VIEWS.todo.some(v => v[0] === s.todoView)) s.todoView = 'list';
     if (!VIEWS.insights.some(v => v[0] === s.insView)) s.insView = 'week';
     if (!VIEWS.vision.some(v => v[0] === s.visView)) s.visView = 'board';
+    if (!VIEWS.diary.some(v => v[0] === s.diaryView)) s.diaryView = 'feed';
+    if (!VIEWS.learn.some(v => v[0] === s.learnView)) s.learnView = 'guide';
     if (!['auto', 'light', 'dark'].includes(s.theme)) s.theme = 'auto';
+    if (!LOOKS.includes(s.look)) s.look = 'aurora';
+    if (!['ask', 'auto'].includes(s.chainMode)) s.chainMode = 'ask';
+    const categories = normalizeCategories(d?.categories);
+    const CAT_IDS = categories.map(c => c.id);
 
     const blocks = (Array.isArray(d?.blocks) ? d.blocks : [])
       .filter(b => b && b.id && isISO(b.date) && Number.isFinite(b.start) && Number.isFinite(b.end) && b.end > b.start)
@@ -249,6 +294,7 @@
         repeat: normRepeat(b.repeat),
         skip: Array.isArray(b.skip) ? b.skip.filter(isISO) : [],
         doneOn: Array.isArray(b.doneOn) ? b.doneOn.filter(isISO) : (b.done ? [b.date] : []),
+        postponed: normHistory(b.postponed),
       }));
     const tasks = (Array.isArray(d?.tasks) ? d.tasks : [])
       .filter(t => t && t.id && typeof t.title === 'string')
@@ -256,13 +302,22 @@
         ...t,
         id: String(t.id),
         priority: PRIORITIES[t.priority] ? t.priority : 'med',
-        category: CAT_IDS.includes(t.category) ? t.category : 'work',
+        category: CAT_IDS.includes(t.category) ? t.category : (CAT_IDS.includes('work') ? 'work' : 'other'),
         estimate: Math.max(0, parseInt(t.estimate, 10) || 0),
         due: isISO(t.due) ? t.due : '',
         done: !!t.done,
         repeat: normRepeat(t.repeat),
         notes: String(t.notes || ''),
+        after: typeof t.after === 'string' ? t.after : '',
+        postponed: normHistory(t.postponed),
       }));
+    // Drop links to tasks that no longer exist, and break any loops.
+    const taskIds = new Set(tasks.map(t => t.id));
+    for (const t of tasks) {
+      if (!taskIds.has(t.after) || t.after === t.id) { t.after = ''; continue; }
+      let cur = tasks.find(x => x.id === t.after), hops = 0;
+      while (cur && cur.after && hops < 200) { if (cur.after === t.id) { t.after = ''; break; } cur = tasks.find(x => x.id === cur.after); hops++; }
+    }
     let entries = (Array.isArray(d?.entries) ? d.entries : [])
       .filter(e => e && e.id && typeof e.ref === 'string' && Number.isFinite(e.start) && (e.end == null || Number.isFinite(e.end)));
     let timer = d?.timer && typeof d.timer.ref === 'string' && ['running', 'paused'].includes(d.timer.status) ? { ref: d.timer.ref, status: d.timer.status } : null;
@@ -272,7 +327,12 @@
     else if (timer.status === 'paused') open.forEach(e => { e.end = Date.now(); });
     else if (!open.some(e => e.ref === timer.ref)) timer.status = 'paused';
     entries = entries.filter(e => e.end == null || e.end > e.start);
-    return { version: 2, updatedAt: Number(d?.updatedAt) || 0, blocks, tasks, entries, timer, settings: s, vision: normalizeVision(d?.vision) };
+    const lateSeen = d?.lateSeen && typeof d.lateSeen === 'object' ? Object.fromEntries(Object.entries(d.lateSeen).filter(([k, v]) => taskIds.has(k) && typeof v === 'string')) : {};
+    return {
+      version: 3, updatedAt: Number(d?.updatedAt) || 0, blocks, tasks, entries, timer, settings: s, categories,
+      vision: normalizeVision(d?.vision), diary: normalizeDiary(d?.diary),
+      learn: { done: arrOf(d?.learn?.done).filter(x => typeof x === 'string') }, lateSeen,
+    };
   }
 
   let storeKey = GUEST_KEY;
@@ -308,6 +368,17 @@
 
   const findBlock = id => state.blocks.find(b => b.id === id);
   const findTask = id => state.tasks.find(t => t.id === id);
+  const cats = () => state.categories;
+  const catOf = id => cats().find(c => c.id === id) || cats().find(c => c.id === 'other') || cats()[0];
+  const defaultCat = () => (cats().some(c => c.id === lastCategory) ? lastCategory : cats()[0].id);
+
+  // Category colors live in a generated stylesheet so custom categories work in every look.
+  function applyCategoryStyles() {
+    let el = document.getElementById('cat-styles');
+    if (!el) { el = document.createElement('style'); el.id = 'cat-styles'; document.head.appendChild(el); }
+    const rule = (cls, color) => `.${cls}{--cat-base:${color};--cat:color-mix(in oklab,${color} var(--cat-fg-amt),var(--cat-fg-blend));--cat-bg:color-mix(in oklab,${color} var(--cat-bg-amt),var(--surface-solid));}`;
+    el.textContent = cats().map(c => rule('cat-' + c.id, c.color)).join('') + LIFE_AREAS.map(a => rule(a.cat, a.color)).join('');
+  }
   const dayBounds = () => [state.settings.dayStart * 60, state.settings.dayEnd * 60];
   const minToY = m => (m - state.settings.dayStart * 60) / 60 * HOUR_H;
   const yToMin = y => state.settings.dayStart * 60 + (y / HOUR_H) * 60;
@@ -458,7 +529,7 @@
         }
         t.prevRepeat = t.repeat;
         t.repeat = null;
-        toast(next ? `Done. Next one is due ${dayLabel(next).toLowerCase()}.` : 'Done. That was the last one in the series.');
+        toast(next ? `Done. Next one is due ${dayLabelIn(next)}.` : 'Done. That was the last one in the series.');
       }
       if (state.timer?.ref === 'task:' + t.id) { closeOpen(now); state.timer = null; }
     } else if (!done && t.done) {
@@ -487,6 +558,145 @@
       if (m) return { g, m };
     }
     return null;
+  }
+
+  // ---------- Postponing & linked tasks (finish-to-start chains) ----------
+  const successorsOf = id => state.tasks.filter(t => t.after === id && !t.done);
+  function chainAfter(id, seen = new Set()) {
+    for (const s of successorsOf(id)) if (!seen.has(s.id)) { seen.add(s.id); chainAfter(s.id, seen); }
+    return seen;
+  }
+  // The date a task "lives" on: its latest unfinished scheduled block, else its due date.
+  function taskDate(t) {
+    const bs = state.blocks.filter(b => b.taskId === t.id && !b.repeat && !b.doneOn.length).map(b => b.date).sort();
+    return bs[bs.length - 1] || t.due || '';
+  }
+  function addHistory(obj, from, to, reason) {
+    obj.postponed = [...(obj.postponed || []), { from, to, at: Date.now(), reason: reason || '' }];
+  }
+  // Move a task and its unfinished one-off blocks by N days, then drag every linked task after it by the same amount.
+  function shiftTask(t, days, reason, visited = new Set()) {
+    if (!days || visited.has(t.id)) return 0;
+    visited.add(t.id);
+    const from = taskDate(t);
+    if (t.due) t.due = addDays(t.due, days);
+    for (const b of state.blocks) {
+      if (b.taskId !== t.id || b.repeat || b.doneOn.length) continue;
+      b.date = addDays(b.date, days);
+    }
+    if (from && days > 0) addHistory(t, from, addDays(from, days), reason);
+    let moved = 1;
+    for (const s of successorsOf(t.id)) moved += shiftTask(s, days, `Moved with “${t.title}”`, visited);
+    return moved;
+  }
+  // Postpone a task to a later date. Returns how many linked tasks moved with it.
+  function postponeTask(t, to, reason, fromDate) {
+    const from = fromDate || taskDate(t) || todayISO();
+    const days = dayNum(to) - dayNum(from);
+    if (days <= 0) return -1;
+    delete state.lateSeen[t.id];
+    if (!taskDate(t)) {
+      t.due = to;
+      addHistory(t, from, to, reason);
+      const visited = new Set([t.id]);
+      return sum(successorsOf(t.id), s => shiftTask(s, days, `Moved with “${t.title}”`, visited));
+    }
+    const n = Math.max(0, shiftTask(t, days, reason) - 1);
+    if (t.due && t.due < to) t.due = to;
+    return n;
+  }
+  // Postpone one block occurrence (a block linked to a task moves the task instead).
+  function postponeOcc(o, to, reason) {
+    const t = o.b.taskId && findTask(o.b.taskId);
+    if (t && !o.b.repeat) return postponeTask(t, to, reason, o.date);
+    if (dayNum(to) <= dayNum(o.date)) return -1;
+    if (o.b.repeat) {
+      const nb = detach(o.b, o.date, { date: to, repeat: null });
+      addHistory(nb, o.date, to, reason);
+    } else {
+      const oldRef = `block:${o.b.id}@${o.b.date}`;
+      o.b.date = to;
+      if (!o.b.taskId) remapRef(oldRef, `block:${o.b.id}@${to}`);
+      addHistory(o.b, o.date, to, reason);
+    }
+    return 0;
+  }
+  // When does a task count as late? After its last scheduled block ends, or at the end of its due date.
+  function taskDeadline(t) {
+    const bs = state.blocks.filter(b => b.taskId === t.id && !b.repeat);
+    if (bs.length) return Math.max(...bs.map(b => isoToTs(b.date, b.end)));
+    if (t.due) return isoToTs(addDays(t.due, 1));
+    return null;
+  }
+  function lateChains() {
+    const now = Date.now();
+    return state.tasks.filter(t => {
+      if (t.done || !successorsOf(t.id).length) return false;
+      const dl = taskDeadline(t);
+      return dl && dl < now && state.lateSeen[t.id] !== String(dl);
+    });
+  }
+  function pushChainToTomorrow(t, reason = 'Ran late') {
+    const tomorrow = addDays(todayISO(), 1);
+    const from = taskDate(t) || todayISO();
+    const target = dayNum(from) >= dayNum(tomorrow) ? addDays(from, 1) : tomorrow;
+    return postponeTask(t, target, reason);
+  }
+  let lastLateKey = '';
+  function checkLateChains() {
+    const late = lateChains();
+    if (state.settings.chainMode === 'auto' && late.length) {
+      let moved = 0;
+      late.forEach(t => { moved += 1 + Math.max(0, pushChainToTomorrow(t, 'Ran late (moved automatically)')); });
+      save();
+      renderAll();
+      toast(`${late.length} late task${late.length === 1 ? '' : 's'} and ${moved - late.length} linked task${moved - late.length === 1 ? '' : 's'} moved to tomorrow.`);
+      return;
+    }
+    const key = late.map(t => t.id).join(',');
+    if (key !== lastLateKey) { lastLateKey = key; renderBanner(); }
+  }
+  // A block was moved to a later day by hand (drag or edit): record it as postponed and drag linked tasks along.
+  function markMovedLater(b, oldDate, newDate) {
+    const days = dayNum(newDate) - dayNum(oldDate);
+    if (days <= 0) return null;
+    const t = b.taskId && findTask(b.taskId);
+    if (!t) { addHistory(b, oldDate, newDate, ''); return { count: b.postponed.length, linked: 0 }; }
+    addHistory(t, oldDate, newDate, '');
+    if (t.due && t.due < newDate) t.due = newDate;
+    const visited = new Set([t.id]);
+    const linked = sum(successorsOf(t.id), s => shiftTask(s, days, `Moved with “${t.title}”`, visited));
+    delete state.lateSeen[t.id];
+    return { count: t.postponed.length, linked };
+  }
+  const ordinal = n => n + (n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th');
+  function postponedToast(info, to, snapshot) {
+    if (!info) return;
+    const msg = `Marked as postponed to ${dayLabelIn(to)}` + (info.count > 1 ? ` (${ordinal(info.count)} time)` : '') +
+      (info.linked ? `. ${info.linked} linked task${info.linked === 1 ? '' : 's'} moved too.` : '.');
+    toast(msg, snapshot ? () => { state = normalize(JSON.parse(snapshot)); save(); renderAll(); } : undefined);
+  }
+  function historyHTML(list) {
+    if (!list?.length) return '';
+    return `<b>↷ Postponed ${list.length}×</b>` + list.slice(-4).reverse().map(p =>
+      `<span>${esc(p.from ? fmtShortDate(p.from) : '—')} → ${esc(fmtShortDate(p.to))}${p.reason ? ` · ${esc(p.reason)}` : ''}</span>`).join('');
+  }
+
+  function renderBanner() {
+    const m = mode();
+    const late = ['timeblock', 'todo'].includes(m) ? lateChains() : [];
+    if (!late.length) { bannerEl.innerHTML = ''; return; }
+    const t = late[0];
+    const n = chainAfter(t.id).size;
+    bannerEl.innerHTML = `<div class="banner" data-late="${esc(t.id)}">
+      <span class="b-icon" aria-hidden="true">⏰</span>
+      <div class="b-text"><b>“${esc(t.title)}” wasn’t finished on time.</b> ${n} linked task${n === 1 ? '' : 's'} come${n === 1 ? 's' : ''} after it.${late.length > 1 ? ` (+${late.length - 1} more late chain${late.length > 2 ? 's' : ''})` : ''}</div>
+      <div class="b-actions">
+        <button type="button" class="btn sm primary" data-late-act="push">Push chain to tomorrow</button>
+        <button type="button" class="btn sm" data-late-act="pick">Pick a date…</button>
+        <button type="button" class="btn sm" data-late-act="done">Mark done</button>
+        <button type="button" class="btn sm" data-late-act="dismiss">Dismiss</button>
+      </div></div>`;
   }
 
   function setOccDone(o, done) {
@@ -521,7 +731,7 @@
     start = clamp(start, lo, hi - SNAP);
     const b = {
       id: uid(), date, start, end: Math.min(start + len, hi), title: t.title, category: t.category || lastCategory,
-      notes: t.notes || '', taskId: t.id, repeat: null, skip: [], doneOn: [],
+      notes: t.notes || '', taskId: t.id, repeat: null, skip: [], doneOn: [], postponed: [],
     };
     state.blocks.push(b);
     save();
@@ -611,15 +821,23 @@
     state.timer = null;
     const total = trackedMs(ref) / 60000;
     const info = refInfo(ref);
+    const today = todayISO();
+    const span = actualSpan(ref, today);
+    const slot = plannedSlot(ref, today);
     if (info?.kind === 'task' && !info.task.done) { setTaskDone(info.task, true); }
     else if (info?.kind === 'block' && !info.occ.done) { setOccDone(info.occ, true); }
     else { save(); renderAll(); }
-    toast(`Stopped. ${fmtDur(total)} tracked${info ? ` on “${info.title}”` : ''}.`);
+    const finish = span ? ` Finished ${fmtTs(span.end)}` + (slot ? ` (${deltaLabel(span.end, today, slot.end, 'end').replace(/<[^>]+>/g, '')})` : '') + '.' : '';
+    toast(`${fmtDur(total)} tracked${info ? ` on “${info.title}”` : ''}.${finish}`);
   }
 
   // ---------- DOM refs ----------
-  const views = { timeblock: $('#view-timeblock'), todo: $('#view-todo'), insights: $('#view-insights'), vision: $('#view-vision') };
-  const modeBtns = document.querySelectorAll('.mode-switch [data-mode]');
+  const views = {
+    timeblock: $('#view-timeblock'), todo: $('#view-todo'), insights: $('#view-insights'),
+    vision: $('#view-vision'), diary: $('#view-diary'), learn: $('#view-learn'),
+  };
+  const modeBtns = document.querySelectorAll('.app-nav [data-mode]');
+  const bannerEl = $('#chain-banner'), tbStrip = $('#tb-strip'), todoStrip = $('#todo-strip'), sideQuote = $('#side-quote');
   const viewSwitch = $('#view-switch');
   const periodTitle = $('#period-title'), periodSub = $('#period-sub'), periodLabel = $('#period-label');
   const dayPicker = $('#day-picker'), todayBtn = $('#today-btn');
@@ -645,16 +863,25 @@
 
   // ---------- Theme, mode & views ----------
   const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+  // Each look has a light and a dark palette. "Match my device" follows the system, except
+  // Midnight, which stays dark unless the device explicitly asks for light.
   function applyTheme() {
-    const t = state.settings.theme;
-    if (t === 'auto') delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = t;
-    const dark = t === 'dark' || (t === 'auto' && darkQuery.matches);
-    $('meta[name="theme-color"]').content = dark ? '#0f1117' : '#f5f6fa';
+    const { theme: t, look } = state.settings;
+    const dark = t === 'dark' || (t === 'auto' && (look === 'midnight' ? !matchMedia('(prefers-color-scheme: light)').matches : darkQuery.matches));
+    const root = document.documentElement;
+    root.dataset.look = look;
+    root.dataset.scheme = dark ? 'dark' : 'light';
+    delete root.dataset.theme;
+    try { localStorage.setItem('dayblock:look', JSON.stringify({ look, mode: t })); } catch { /* ignore */ }
+    requestAnimationFrame(() => {
+      const c = getComputedStyle(root).getPropertyValue('--theme-color').trim();
+      if (c) $('meta[name="theme-color"]').content = c;
+    });
+    applyCategoryStyles();
   }
 
   const mode = () => state.settings.mode;
-  const VIEW_KEY = { timeblock: 'tbView', todo: 'todoView', insights: 'insView', vision: 'visView' };
+  const VIEW_KEY = { timeblock: 'tbView', todo: 'todoView', insights: 'insView', vision: 'visView', diary: 'diaryView', learn: 'learnView' };
   const viewFor = (m = mode()) => state.settings[VIEW_KEY[m]];
 
   function setMode(m) {
@@ -722,6 +949,17 @@
       } else if (v === 'board') {
         periodTitle.textContent = 'Vision board';
         periodSub.textContent = 'See it, feel it, plan it';
+      } else if (v === 'feed') {
+        periodTitle.textContent = 'Diary';
+        const n = state.diary.length;
+        periodSub.textContent = n ? `${n} memor${n === 1 ? 'y' : 'ies'} saved` : 'Your story, one day at a time';
+      } else if (v === 'guide') {
+        periodTitle.textContent = 'How to use Dayblock';
+        periodSub.textContent = 'A quick tour of every feature';
+      } else if (v === 'lessons') {
+        periodTitle.textContent = learnOpen ? 'Lesson' : 'Learn';
+        const total = (window.DAYBLOCK_LEARN?.lessons || []).length;
+        periodSub.textContent = `${state.learn.done.length} of ${total} lessons completed`;
       } else {
         const g = state.vision.goals;
         periodTitle.textContent = 'Life goals';
@@ -754,14 +992,45 @@
     const m = mode();
     for (const [k, el] of Object.entries(views)) el.hidden = k !== m;
     modeBtns.forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
-    fab.hidden = m === 'insights' || m === 'vision';
-    fab.setAttribute('aria-label', m === 'todo' ? 'Add task' : 'Add time block');
+    fab.hidden = !['timeblock', 'todo', 'diary'].includes(m);
+    fab.setAttribute('aria-label', m === 'todo' ? 'Add task' : m === 'diary' ? 'New memory' : 'Add time block');
     renderToolbar();
+    renderBanner();
+    tbStrip.innerHTML = m === 'timeblock' && state.settings.tbView === 'day' ? weekStrip() : '';
+    todoStrip.innerHTML = m === 'todo' && state.settings.todoView === 'day' ? weekStrip() : '';
     if (m === 'timeblock') renderTimeblock();
     else if (m === 'todo') renderTodo();
     else if (m === 'insights') renderInsights();
-    else renderVision();
+    else if (m === 'vision') renderVision();
+    else if (m === 'diary') renderDiary();
+    else renderLearn();
     renderTimerBar();
+    renderSideQuote();
+  }
+
+  // 7-day strip above day views: tap a day to jump to it. Dots show that day's blocks.
+  function weekStrip() {
+    const [a] = periodRange('week');
+    const today = todayISO();
+    return `<div class="week-strip">${datesBetween(a, addDays(a, 6)).map(d => {
+      const occs = occurrencesOn(d).slice(0, 4);
+      return `<button type="button" data-strip="${d}" class="${d === today ? 'today' : ''}"${d === currentDate ? ' aria-current="date"' : ''}>` +
+        `${esc(DOW_SHORT[dowOf(d)])}<b>${fromISO(d).getDate()}</b>` +
+        `<span class="dots">${occs.map(o => `<i class="cat-${o.category}"></i>`).join('')}</span></button>`;
+    }).join('')}</div>`;
+  }
+  [tbStrip, todoStrip].forEach(el => el.addEventListener('click', e => {
+    const b = e.target.closest('[data-strip]');
+    if (!b) return;
+    currentDate = b.dataset.strip;
+    renderAll();
+    scrollToRelevant();
+  }));
+
+  function renderSideQuote() {
+    const a = todaysAffirmation();
+    sideQuote.hidden = !a;
+    if (a) sideQuote.innerHTML = `Today's affirmation<b>“${esc(a)}”</b>`;
   }
 
   // ---------- Time blocks: day & week timeline ----------
@@ -781,6 +1050,26 @@
     node.classList.toggle('compact', h < 44);
   }
 
+  // First start and last finish of the tracked sessions for an item on one day (finish = now while running).
+  function actualSpan(ref, date) {
+    const ds = isoToTs(date), de = isoToTs(addDays(date, 1)), now = Date.now();
+    const es = state.entries.filter(e => e.ref === ref && overlap(e.start, e.end ?? now, ds, de) > 0);
+    if (!es.length) return null;
+    return {
+      start: Math.min(...es.map(e => e.start)),
+      end: Math.max(...es.map(e => e.end ?? now)),
+      live: es.some(e => e.end == null),
+      ms: sum(es, e => overlap(e.start, e.end ?? now, ds, de)),
+    };
+  }
+  // "+12m late" / "5m early" / "on time" against a planned minute-of-day.
+  function deltaLabel(actualTs, date, plannedMin, kind) {
+    const diff = Math.round((actualTs - isoToTs(date, plannedMin)) / 60000);
+    if (Math.abs(diff) <= 2) return `<span class="ontime">on time</span>`;
+    const word = kind === 'start' ? (diff > 0 ? 'late' : 'early') : (diff > 0 ? 'over' : 'early');
+    return `<span class="${diff > 0 ? 'late' : 'early'}">${fmtDur(Math.abs(diff))} ${word}</span>`;
+  }
+
   function blockNode(o, pos, now, colWidth) {
     const n = document.createElement('div');
     const timing = state.timer?.ref === o.ref;
@@ -791,15 +1080,25 @@
     n.dataset.key = o.key;
     const planned = o.end - o.start;
     const spent = o.ref.startsWith('task:') || timing || state.entries.some(e => e.ref === o.ref) ? trackedMs(o.ref) / 60000 : 0;
+    const span = spent > 0 ? actualSpan(o.ref, o.date) : null;
+    const actual = span
+      ? `<div class="block-actual">● ${esc(fmtTs(span.start))} – ${span.live ? 'now' : esc(fmtTs(span.end))} · ${deltaLabel(span.start, o.date, o.start, 'start')}</div>`
+      : '';
+    const pp = o.b.postponed?.length || (o.b.taskId && findTask(o.b.taskId)?.postponed?.length) || 0;
+    const chain = o.b.taskId && (findTask(o.b.taskId)?.after || state.tasks.some(t => t.after === o.b.taskId));
     n.innerHTML =
       `<button type="button" class="check" aria-label="${o.done ? 'Mark not done' : 'Mark done'}" aria-pressed="${o.done}"></button>` +
-      `<div class="block-body"><div class="block-title"></div><div class="block-time"></div></div>` +
+      `<div class="block-body"><div class="block-title"></div><div class="block-time"></div>${actual}</div>` +
       (narrow ? '' : `<button type="button" class="play${timing ? ' on' : ''}" aria-label="${running ? 'Pause timer' : 'Start timer'}" title="${running ? 'Pause timer' : 'Start timer'}">${running ? ICON.pause : ICON.play}</button>`) +
       (spent > 0 ? `<span class="track-bar" style="width:${Math.min(100, spent / planned * 100)}%"></span>` : '') +
       `<div class="resize" aria-hidden="true"></div>`;
     n.querySelector('.block-title').textContent = o.title || 'Untitled';
-    n.querySelector('.block-time').innerHTML = `${esc(fmtTime(o.start))} – ${esc(fmtTime(o.end))}${o.b.repeat ? ' <span class="rep" title="Repeats">↻</span>' : ''}`;
-    n.title = `${o.title || 'Untitled'} · ${fmtTime(o.start)} – ${fmtTime(o.end)}` +
+    n.querySelector('.block-time').innerHTML = `${esc(fmtTime(o.start))} – ${esc(fmtTime(o.end))}` +
+      (o.b.repeat ? ' <span class="rep" title="Repeats">↻</span>' : '') +
+      (chain ? ' <span class="lnk" title="Linked task">🔗</span>' : '') +
+      (pp ? ` <span class="lnk" title="Postponed ${pp}×">↷${pp}</span>` : '');
+    n.title = `${o.title || 'Untitled'} · planned ${fmtTime(o.start)} – ${fmtTime(o.end)}` +
+      (span ? `\nActual ${fmtTs(span.start)} – ${span.live ? 'now' : fmtTs(span.end)}` : '') +
       (o.b.repeat ? `\n${describeRepeat(o.b.repeat, o.b.date)}` : '') +
       (spent > 0 ? `\nTracked ${fmtDur(spent)} of ${fmtDur(planned)}` : '') +
       (o.b.notes ? '\n' + o.b.notes : '');
@@ -843,17 +1142,32 @@
       const pos = layout(visible);
       const now = date === today ? nowMin() : -1;
       visible.forEach(o => col.appendChild(blockNode(o, pos.get(o.key), now, colWidth)));
-      if (date === today) {
-        const m = nowMin();
-        if (m >= lo && m <= hi) {
-          const line = document.createElement('div');
-          line.className = 'now-line';
-          line.style.top = minToY(m) + 'px';
-          col.appendChild(line);
-        }
-      }
+      drawActualLanes(col, date);
     });
+    updateNow();
     if (prevScroll != null) wrapEl.scrollTop = prevScroll;
+  }
+
+  // Slim bars on the right edge of a day column showing when you actually tracked time.
+  function drawActualLanes(col, date) {
+    col.querySelectorAll('.actual').forEach(n => n.remove());
+    const [lo, hi] = dayBounds();
+    const ds = isoToTs(date), de = isoToTs(addDays(date, 1)), now = Date.now();
+    for (const e of state.entries) {
+      const end = e.end ?? now;
+      if (overlap(e.start, end, ds, de) <= 0) continue;
+      const sMin = clamp((Math.max(e.start, ds) - ds) / 60000, lo, hi);
+      const eMin = clamp((Math.min(end, de) - ds) / 60000, lo, hi);
+      if (eMin <= sMin) continue;
+      const info = refInfo(e.ref);
+      const lane = document.createElement('div');
+      lane.className = `actual cat-${info?.category || e.category || 'other'}${e.end == null ? ' live' : ''}`;
+      lane.style.top = minToY(sMin) + 'px';
+      lane.style.height = Math.max(3, minToY(eMin) - minToY(sMin)) + 'px';
+      lane.dataset.entry = e.id;
+      lane.title = `Tracked: ${info?.title || e.title}\n${fmtTs(e.start)} – ${e.end == null ? 'now (running)' : fmtTs(e.end)} · ${fmtDur((end - e.start) / 60000)}`;
+      col.appendChild(lane);
+    }
   }
 
   function scrollToRelevant() {
@@ -914,14 +1228,18 @@
     const pct = planned ? Math.round(doneMin / planned * 100) : 0;
     const outside = v === 'month' ? 0 : occs.filter(o => o.end <= lo || o.start >= hi).length;
     const periodWord = v === 'day' ? 'today' : v === 'week' ? 'this week' : 'this month';
+    const doneCount = occs.filter(o => o.done).length;
+    const mood = !planned ? 'Ready when you are' : pct >= 100 ? 'All done. Great work!' : pct >= 60 ? 'Great momentum' : pct >= 25 ? 'Good progress' : 'Let’s get started';
     summaryEl.innerHTML = `
+      <div class="ring-row">
+        <div class="ring" style="--p:${Math.min(100, pct)}" role="progressbar" aria-label="Planned time completed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span>${pct}%</span></div>
+        <div><b>${mood}</b><small>${planned ? `${doneCount} of ${occs.length} block${occs.length === 1 ? '' : 's'} done ${periodWord}` : v === 'month' ? 'Pick a day to start planning.' : 'Click or drag on the timeline to plan.'}</small></div>
+      </div>
       <div class="stat-row">
-        <div class="stat"><span class="stat-num">${occs.length}</span><span class="stat-label">${occs.length === 1 ? 'block' : 'blocks'}</span></div>
         <div class="stat"><span class="stat-num">${fmtDur(planned)}</span><span class="stat-label">planned</span></div>
         <div class="stat"><span class="stat-num">${fmtDur(tracked)}</span><span class="stat-label">tracked</span></div>
+        <div class="stat"><span class="stat-num">${occs.length}</span><span class="stat-label">${occs.length === 1 ? 'block' : 'blocks'}</span></div>
       </div>
-      <div class="progress" role="progressbar" aria-label="Planned time completed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>
-      <div class="progress-label">${planned ? `${pct}% of planned time done ${periodWord}` : v === 'month' ? 'Pick a day to start planning.' : 'Click or drag on the timeline to plan.'}</div>
       ${outside ? `<div class="off-note">${outside} block${outside > 1 ? 's are' : ' is'} outside your visible hours (change in Settings).</div>` : ''}`;
 
     const linked = new Set(state.blocks.filter(x => x.taskId).map(x => x.taskId));
@@ -990,6 +1308,9 @@
             ${t.repeat ? `<span class="pill" title="${esc(describeRepeat(t.repeat, t.due))}">${ICON.repeat}${esc(REPEAT_FREQS[t.repeat.freq])}</span>` : ''}
             ${trackPill(ref, plannedForRef(ref))}
             ${(() => { const ms = milestoneForTask(t.id); return ms ? `<span class="pill" title="Step of a life goal">🎯 ${esc(ms.g.title)}</span>` : ''; })()}
+            ${(() => { const p = t.after && findTask(t.after); return p ? `<span class="pill link" title="Starts after this task">🔗 After: ${esc(p.title)}${p.done ? ' ✓' : ''}</span>` : ''; })()}
+            ${(() => { const n = successorsOf(t.id).length; return n ? `<span class="pill link" title="Tasks waiting for this one">→ ${n} waiting</span>` : ''; })()}
+            ${t.postponed.length ? `<span class="pill warn" title="${esc(t.postponed.map(p => `${p.from} → ${p.to}${p.reason ? ' (' + p.reason + ')' : ''}`).join('\n'))}">↷ Postponed ${t.postponed.length}×</span>` : ''}
             ${t.notes ? '<span class="pill">Notes</span>' : ''}
           </span>
         </button>
@@ -997,6 +1318,7 @@
         <div class="todo-actions">
           ${t.done ? '' : `<button type="button" class="icon-btn sm${timing ? ' active' : ''}" data-act="track" aria-label="${running ? 'Pause timer' : 'Start timer'}" title="${running ? 'Pause timer' : timing ? 'Resume timer' : 'Start timer'}">${running ? ICON.pause : ICON.play}</button>`}
           ${!b && !t.done ? `<button type="button" class="icon-btn sm hover-only" data-act="schedule" aria-label="Schedule in the next free slot" title="Put on the timeline">${ICON.calendar}</button>` : ''}
+          ${!t.done ? `<button type="button" class="icon-btn sm hover-only" data-act="postpone" aria-label="Postpone" title="Postpone">↷</button>` : ''}
           <button type="button" class="icon-btn sm hover-only" data-act="delete" aria-label="Delete task" title="Delete">${ICON.trash}</button>
         </div>
       </li>`;
@@ -1019,10 +1341,13 @@
   function renderTodoList() {
     const today = todayISO();
     const active = state.tasks.filter(t => !t.done);
+    const isLinked = t => !!t.after || state.tasks.some(x => x.after === t.id);
     const counts = {
       all: state.tasks.length,
       active: active.length,
       today: active.filter(t => t.due && t.due <= today).length,
+      linked: active.filter(isLinked).length,
+      postponed: active.filter(t => t.postponed.length).length,
       done: state.tasks.length - active.length,
     };
     filtersEl.querySelectorAll('[data-filter]').forEach(b => {
@@ -1030,20 +1355,40 @@
       b.querySelector('.count').textContent = counts[b.dataset.filter];
     });
     clearDoneBtn.hidden = counts.done === 0;
+    const sched = scheduledMap();
+    if (todoFilter === 'linked') { renderChains(sched); return; }
     let list = state.tasks;
     if (todoFilter === 'active') list = active;
     else if (todoFilter === 'today') list = active.filter(t => t.due && t.due <= today);
+    else if (todoFilter === 'postponed') list = active.filter(t => t.postponed.length).sort((a, b) => b.postponed.length - a.postponed.length);
     else if (todoFilter === 'done') list = list.filter(t => t.done);
-    const sched = scheduledMap();
     const empty = {
       active: ['Nothing on your list', 'Add a task above to get started.'],
       today: ['Nothing due today', 'Tasks due today or earlier show up here.'],
+      postponed: ['Nothing postponed', 'Tasks you move to a later date show up here, so you can spot what keeps slipping.'],
       done: ['No finished tasks yet', 'Tick a task off and it will land here.'],
       all: ['No tasks yet', 'Add a task above to get started.'],
     }[todoFilter];
     todoContent.innerHTML = list.length
-      ? `<ul class="todo-list card">${sortTasks(list).map(t => taskItem(t, sched)).join('')}</ul>`
+      ? `<ul class="todo-list card">${(todoFilter === 'postponed' ? list : sortTasks(list)).map(t => taskItem(t, sched)).join('')}</ul>`
       : emptyState(...empty);
+  }
+
+  // Linked tasks shown as chains in order: A → B → C.
+  function renderChains(sched) {
+    const roots = state.tasks.filter(t => !t.done && (!t.after || findTask(t.after)?.done) && successorsOf(t.id).length);
+    const chainList = root => {
+      const out = [], walk = (t, depth) => { out.push([t, depth]); successorsOf(t.id).forEach(s => walk(s, depth + 1)); };
+      walk(root, 0);
+      return out;
+    };
+    todoContent.innerHTML = roots.length
+      ? roots.map(r => {
+          const items = chainList(r);
+          return `<div class="todo-section"><h2 class="section-title">🔗 Chain · ${items.length} tasks</h2><ul class="todo-list card">` +
+            items.map(([t, depth]) => taskItem(t, sched).replace('<li class="todo-item', `<li style="padding-left:${10 + depth * 22}px" class="todo-item`)).join('') + '</ul></div>';
+        }).join('')
+      : emptyState('No linked tasks yet', 'Open a task and choose “Starts after” to link it to another. If the first one slips, everything after it moves too.');
   }
 
   function renderTodoDay() {
@@ -1053,7 +1398,7 @@
     const repeats = state.tasks.filter(t => virtualDates(t, d, d).length);
     let html = '';
     if (d === today) html += section('Overdue', sortTasks(state.tasks.filter(t => !t.done && t.due && t.due < today)).map(t => taskItem(t, sched)));
-    html += section(`Due ${dayLabel(d).toLowerCase()}`, due.map(t => taskItem(t, sched)));
+    html += section(`Due ${dayLabelIn(d)}`, due.map(t => taskItem(t, sched)));
     html += section('Repeats on this day', repeats.map(t => taskItem(t, sched, { virtualDate: d })));
     if (d === today) html += section('No due date', sortTasks(state.tasks.filter(t => !t.done && !t.due)).map(t => taskItem(t, sched)));
     todoContent.innerHTML = html || emptyState('Nothing due', 'Add a task above. It will be due on this day.');
@@ -1153,8 +1498,9 @@
     const planned = sum(list, r => r.planned);
     const tracked = sum(list, r => r.tracked);
     if (!planned && !tracked) {
-      insightsEl.innerHTML = `<div class="card">${emptyState('No data for this period yet',
-        'Plan time blocks or set "time needed" on tasks, then press ▶ on any task or block to track time. Planned vs. spent time shows up here.')}</div>`;
+      const extras = insightsExtras(a, b, v);
+      insightsEl.innerHTML = (extras.hasData ? '' : `<div class="card">${emptyState('No data for this period yet',
+        'Plan time blocks or set "time needed" on tasks, then press ▶ on any task or block to track time. Planned vs. spent time shows up here.')}</div>`) + extras.html;
       return;
     }
     const diff = tracked - planned;
@@ -1171,16 +1517,16 @@
       </div>`;
 
     // Category breakdown
-    const cats = CATEGORIES.map(c => ({
+    const catRows = cats().map(c => ({
       ...c,
       planned: sum(list.filter(r => r.category === c.id), r => r.planned),
       tracked: sum(list.filter(r => r.category === c.id), r => r.tracked),
     })).filter(c => c.planned || c.tracked);
-    const catMax = Math.max(1, ...cats.map(c => Math.max(c.planned, c.tracked)));
+    const catMax = Math.max(1, ...catRows.map(c => Math.max(c.planned, c.tracked)));
     const catCard = `
       <div class="card ins-card">
         <div class="ins-card-head"><h2>By category</h2><div class="legend"><span><i class="sw planned" style="opacity:.6"></i>Planned</span><span><i class="sw tracked"></i>Tracked</span></div></div>
-        <div class="cat-rows">${cats.map(c => `
+        <div class="cat-rows">${catRows.map(c => `
           <div class="cat-${c.id}">
             <div class="cat-row-head"><span class="name">${esc(c.name)}</span><span class="vals">${fmtDur(c.tracked)} of ${fmtDur(c.planned)}</span></div>
             <div class="dual-bar" data-tip="<b>${esc(c.name)}</b><br>Planned: <b>${fmtDur(c.planned)}</b><br>Tracked: <b>${fmtDur(c.tracked)}</b>">
@@ -1233,9 +1579,130 @@
         </table></div>
       </div>` : '';
 
-    insightsEl.innerHTML = kpis +
+    const extras = insightsExtras(a, b, v);
+    insightsEl.innerHTML = kpis + extras.tips +
       (chartCard ? `<div class="ins-grid">${chartCard}${catCard}</div>` : `<div class="ins-grid" style="grid-template-columns:1fr">${catCard}</div>`) +
-      table + (sessCard ? `<div style="height:16px"></div>${sessCard}` : '');
+      extras.cards + table + (sessCard ? `<div style="height:16px"></div>${sessCard}` : '');
+  }
+
+  // Punctuality (actual vs planned start/finish), working hours, postponements and tips for a period.
+  function insightsExtras(a, b, v) {
+    const fromTs = isoToTs(a), toTs = isoToTs(addDays(b, 1)), now = Date.now();
+    // 1) Punctuality: every planned block in the period that you tracked.
+    const rows = [];
+    for (const o of occurrencesIn(a, b)) {
+      const span = actualSpan(o.ref, o.date);
+      if (!span) continue;
+      const ps = isoToTs(o.date, o.start), pe = isoToTs(o.date, o.end);
+      rows.push({
+        o, span,
+        startD: Math.round((span.start - ps) / 60000),
+        endD: span.live ? null : Math.round((span.end - pe) / 60000),
+        ps, pe,
+      });
+    }
+    const avg = xs => (xs.length ? Math.round(sum(xs, x => x) / xs.length) : 0);
+    const starts = rows.map(r => r.startD), ends = rows.filter(r => r.endD != null).map(r => r.endD);
+    const onTime = rows.filter(r => Math.abs(r.startD) <= 5).length;
+    const fmtD = (d, kind) => d == null ? '<span class="d-ontime">running</span>'
+      : Math.abs(d) <= 2 ? '<span class="d-ontime">on time</span>'
+      : `<span class="${d > 0 ? 'd-late' : 'd-early'}">${d > 0 ? '+' : '−'}${fmtDur(Math.abs(d))} ${kind === 'start' ? (d > 0 ? 'late' : 'early') : (d > 0 ? 'over' : 'early')}</span>`;
+    let punctCard = '';
+    if (rows.length) {
+      const avgS = avg(starts), avgE = avg(ends);
+      punctCard = `<div class="card ins-card">
+        <div class="ins-card-head"><h2>Started and finished vs. plan</h2><span class="muted small">${rows.length} tracked block${rows.length === 1 ? '' : 's'}</span></div>
+        <div class="punct-grid">
+          <div class="punct"><b class="${avgS > 5 ? 'late' : avgS < -5 ? 'early' : ''}">${Math.abs(avgS) <= 2 ? 'On time' : `${fmtDur(Math.abs(avgS))} ${avgS > 0 ? 'late' : 'early'}`}</b><small>average start</small></div>
+          <div class="punct"><b>${Math.round(onTime / rows.length * 100)}%</b><small>started within 5 min of plan</small></div>
+          <div class="punct"><b class="${avgE > 5 ? 'late' : avgE < -5 ? 'early' : ''}">${!ends.length ? '—' : Math.abs(avgE) <= 2 ? 'On time' : `${fmtDur(Math.abs(avgE))} ${avgE > 0 ? 'over' : 'early'}`}</b><small>average finish</small></div>
+        </div>
+        <div class="table-scroll"><table class="ins-table">
+          <thead><tr><th>Block</th><th>Planned</th><th>Actual</th><th class="r">Start</th><th class="r">Finish</th><th>Plan vs. actual</th></tr></thead>
+          <tbody>${rows.sort((x, y) => y.span.start - x.span.start).slice(0, 20).map(r => {
+            const lo = Math.min(r.ps, r.span.start), hi = Math.max(r.pe, r.span.end), w = Math.max(1, hi - lo);
+            const pct = (s, e) => `left:${(s - lo) / w * 100}%;width:${Math.max(2, (e - s) / w * 100)}%`;
+            return `<tr class="cat-${r.o.category}">
+              <td><span class="item">${esc(r.o.title || 'Untitled')}</span><small class="muted">${esc(dayLabel(r.o.date))}</small></td>
+              <td class="num">${esc(fmtTime(r.o.start))}–${esc(fmtTime(r.o.end))}</td>
+              <td class="num">${esc(fmtTs(r.span.start))}–${r.span.live ? 'now' : esc(fmtTs(r.span.end))}</td>
+              <td class="r">${fmtD(r.startD, 'start')}</td><td class="r">${fmtD(r.endD, 'end')}</td>
+              <td><span class="tl-compare" title="Top: planned · Bottom: actual"><span class="pl" style="${pct(r.ps, r.pe)}"></span><span class="ac" style="${pct(r.span.start, r.span.end)}"></span></span></td>
+            </tr>`;
+          }).join('')}</tbody></table></div></div>`;
+    }
+
+    // 2) When you actually work: tracked minutes by hour of day.
+    const byHour = new Array(24).fill(0);
+    for (const e of state.entries) {
+      const end = e.end ?? now;
+      let t = Math.max(e.start, fromTs);
+      const stop = Math.min(end, toTs);
+      while (t < stop) {
+        const d = new Date(t);
+        const next = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours() + 1).getTime();
+        byHour[d.getHours()] += (Math.min(next, stop) - t) / 60000;
+        t = next;
+      }
+    }
+    const trackedTotal = sum(byHour, x => x);
+    let hourCard = '', peakText = '';
+    if (trackedTotal >= 5) {
+      // Best 2-hour window.
+      let best = 0;
+      for (let h = 0; h < 23; h++) {
+        const s = byHour[h] + byHour[h + 1], bs = byHour[best] + byHour[best + 1];
+        if (s > bs || (s === bs && byHour[h] > byHour[best])) best = h;
+      }
+      peakText = `${fmtHour(best)}–${fmtHour(best + 2)}`;
+      const maxM = Math.max(...byHour, 1);
+      const W = 640, H = 150, padL = 4, padB = 22, bw = (W - padL) / 24;
+      let svgOut = `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Tracked time by hour of day">`;
+      byHour.forEach((m, h) => {
+        const bh = m / maxM * (H - padB - 8);
+        const x = padL + h * bw + 2, y = H - padB - bh;
+        if (m > 0) svgOut += `<path class="bar-tracked" d="M${x},${H - padB}V${y + Math.min(3, bh)}Q${x},${y} ${x + 3},${y}H${x + bw - 7}Q${x + bw - 4},${y} ${x + bw - 4},${y + Math.min(3, bh)}V${H - padB}Z"/>`;
+        if (h % 3 === 0) svgOut += `<text x="${x + (bw - 4) / 2}" y="${H - 6}" text-anchor="middle">${esc(fmtHour(h))}</text>`;
+        svgOut += `<rect class="hit" x="${padL + h * bw}" y="0" width="${bw}" height="${H - padB}" data-tip="<b>${esc(fmtHour(h))}–${esc(fmtHour(h + 1))}</b><br>Tracked: <b>${fmtDur(m)}</b>"/>`;
+      });
+      hourCard = `<div class="card ins-card">
+        <div class="ins-card-head"><h2>When you actually work</h2><span class="muted small">Peak: ${esc(peakText)}</span></div>
+        <p class="ins-note">Tracked time by hour of day. Your strongest two hours are <b>${esc(peakText)}</b>.</p>${svgOut}</svg></div>`;
+    }
+
+    // 3) Postponements made in this period.
+    const pps = [];
+    for (const t of state.tasks) for (const p of t.postponed) if (p.at >= fromTs && p.at < toTs) pps.push({ ...p, title: t.title, key: 'task:' + t.id });
+    for (const bl of state.blocks) for (const p of (bl.postponed || [])) if (p.at >= fromTs && p.at < toTs) pps.push({ ...p, title: bl.title, key: 'block:' + bl.id });
+    let ppCard = '';
+    const topItems = Object.values(pps.reduce((acc, p) => { (acc[p.key] ||= { title: p.title, n: 0 }).n++; return acc; }, {})).sort((x, y) => y.n - x.n);
+    if (pps.length) {
+      const reasons = Object.entries(pps.reduce((acc, p) => { const r = p.reason || 'No reason given'; acc[r] = (acc[r] || 0) + 1; return acc; }, {})).sort((x, y) => y[1] - x[1]);
+      const days = sum(pps, p => Math.max(0, dayNum(p.to) - dayNum(p.from || p.to)));
+      ppCard = `<div class="card ins-card">
+        <div class="ins-card-head"><h2>Postponed</h2><span class="muted small">${pps.length} time${pps.length === 1 ? '' : 's'} · ${days} day${days === 1 ? '' : 's'} pushed</span></div>
+        <div class="ins-grid" style="margin:0;grid-template-columns:1fr 1fr">
+          <div><h3 class="section-title" style="margin-bottom:8px">Most postponed</h3>
+            <ul class="insight-tips">${topItems.slice(0, 5).map(x => `<li><span>↷</span><span><b>${esc(x.title)}</b> · ${x.n}×</span></li>`).join('')}</ul></div>
+          <div><h3 class="section-title" style="margin-bottom:8px">Why</h3>
+            <ul class="insight-tips">${reasons.slice(0, 5).map(([r, n]) => `<li><span>•</span><span>${esc(r)} · <b>${n}</b></span></li>`).join('')}</ul></div>
+        </div></div>`;
+    }
+
+    // 4) Plain-language tips from the numbers above.
+    const tips = [];
+    if (rows.length >= 2) {
+      const s = avg(starts);
+      if (s > 7) tips.push(['⏱', `You start <b>${fmtDur(s)} late</b> on average. Try a 10-minute buffer before blocks, or set a reminder 5 minutes earlier.`]);
+      else if (rows.length && onTime / rows.length >= .7) tips.push(['🎯', `<b>${Math.round(onTime / rows.length * 100)}%</b> of your blocks started on time. Great discipline!`]);
+      const e = avg(ends);
+      if (ends.length >= 2 && e > 10) tips.push(['📏', `Blocks run <b>${fmtDur(e)} over</b> on average. Plan about ${Math.min(50, Math.round(e / 60 * 100))}% more time for similar work.`]);
+    }
+    if (peakText) tips.push(['⚡', `Your most productive window is <b>${esc(peakText)}</b>. Protect it for your most important work.`]);
+    if (topItems[0]?.n >= 2) tips.push(['🪓', `“<b>${esc(topItems[0].title)}</b>” was postponed ${topItems[0].n} times. Break it into a smaller first step, or schedule it during your peak hours.`]);
+    const tipsHTML = tips.length ? `<div class="card ins-card" style="margin-bottom:16px"><div class="ins-card-head"><h2>What your data says</h2></div><ul class="insight-tips">${tips.map(([i, t]) => `<li><span>${i}</span><span>${t}</span></li>`).join('')}</ul></div>` : '';
+    const cards = [punctCard, hourCard, ppCard].filter(Boolean).map(c => c.replace('class="card ins-card"', 'class="card ins-card" style="margin-bottom:16px"')).join('');
+    return { tips: tipsHTML, cards, html: tipsHTML + cards, hasData: !!(rows.length || trackedTotal || pps.length) };
   }
 
   // Grouped bar chart: planned vs tracked minutes per day.
@@ -1666,6 +2133,461 @@
     if (g) withUndo(`Deleted goal “${g.title}”`, () => { state.vision.goals = state.vision.goals.filter(x => x !== g); });
   });
 
+  // ---------- Diary: memories with photos, videos and files ----------
+  const diaryEl = $('#diary-content');
+  const ddDialog = $('#diary-dialog');
+  const MAX_FILE = 200 * 1024 * 1024;
+  let diaryQuery = '', diaryFavOnly = false, editingDiaryId = null, draft = [], removedMedia = [];
+  // Hooks filled in by auth.js when signed in (photos sync through the account).
+  const remote = { fetch: null, upload: null, remove: null };
+
+  // Files live in IndexedDB on this device.
+  const Media = (() => {
+    let dbp = null;
+    const open = () => dbp || (dbp = new Promise((res, rej) => {
+      const r = indexedDB.open('dayblock-media', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('files');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    }));
+    const run = async (mode, fn) => {
+      const d = await open();
+      return new Promise((res, rej) => {
+        const t = d.transaction('files', mode);
+        const req = fn(t.objectStore('files'));
+        t.oncomplete = () => res(req?.result);
+        t.onerror = () => rej(t.error);
+      });
+    };
+    const urls = new Map();
+    return {
+      put: (id, blob) => run('readwrite', s => s.put(blob, id)),
+      get: id => run('readonly', s => s.get(id)),
+      del: id => { const u = urls.get(id); if (u) URL.revokeObjectURL(u); urls.delete(id); return run('readwrite', s => s.delete(id)).catch(() => {}); },
+      async url(id, allowRemote) {
+        if (urls.has(id)) return urls.get(id);
+        let blob = await this.get(id).catch(() => null);
+        if (!blob && allowRemote && remote.fetch) {
+          const dataUrl = await remote.fetch(id).catch(() => null);
+          if (dataUrl) { blob = await (await fetch(dataUrl)).blob(); this.put(id, blob).catch(() => {}); }
+        }
+        if (!blob) return null;
+        const u = URL.createObjectURL(blob);
+        urls.set(id, u);
+        return u;
+      },
+    };
+  })();
+
+  // Shrink photos so they stay small enough to sync (under ~900 KB).
+  function compressImage(file, maxSide = 1600) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      const src = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(src);
+        let w = img.naturalWidth, h = img.naturalHeight;
+        const s = Math.min(1, maxSide / Math.max(w, h));
+        w = Math.round(w * s); h = Math.round(h * s);
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        let q = .82, dataUrl = c.toDataURL('image/jpeg', q);
+        while (dataUrl.length > 900000 && q > .45) { q -= .1; dataUrl = c.toDataURL('image/jpeg', q); }
+        if (dataUrl.length > 900000) {
+          const c2 = document.createElement('canvas');
+          c2.width = Math.round(w * .6); c2.height = Math.round(h * .6);
+          c2.getContext('2d').drawImage(c, 0, 0, c2.width, c2.height);
+          dataUrl = c2.toDataURL('image/jpeg', .7);
+        }
+        fetch(dataUrl).then(r => r.blob()).then(blob => res({ blob, dataUrl })).catch(rej);
+      };
+      img.onerror = () => { URL.revokeObjectURL(src); rej(new Error('unreadable image')); };
+      img.src = src;
+    });
+  }
+  const fmtSize = n => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+  const kindOf = mime => mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : mime.startsWith('audio/') ? 'audio' : 'file';
+  const fileIcon = m => m.kind === 'audio' ? '🎵' : /pdf/.test(m.mime) ? '📄' : /zip/.test(m.mime) ? '🗜️' : /sheet|excel/.test(m.mime) ? '📊' : /presentation|powerpoint/.test(m.mime) ? '📽️' : '📎';
+
+  function renderDiary() {
+    if (state.settings.diaryView === 'month') renderDiaryMonth();
+    else renderDiaryFeed();
+  }
+
+  function mediaHTML(media, editable) {
+    const visual = media.filter(m => m.kind === 'image' || m.kind === 'video');
+    const files = media.filter(m => m.kind !== 'image' && m.kind !== 'video');
+    return (visual.length ? `<div class="media-grid${visual.length === 1 && !editable ? ' one' : ''}">${visual.map(m =>
+      `<button type="button" class="media-item" data-media="${esc(m.id)}" data-kind="${m.kind}" data-sync="${m.sync ? 1 : 0}" aria-label="Open ${esc(m.name)}">` +
+      `<span class="spinner" aria-hidden="true"></span>${editable ? `<span class="rm" data-rm="${esc(m.id)}" role="button" aria-label="Remove">×</span>` : ''}</button>`).join('')}</div>` : '') +
+      (files.length ? `<div class="file-list">${files.map(m =>
+        `<button type="button" class="file-chip" data-file="${esc(m.id)}" data-name="${esc(m.name)}">${fileIcon(m)} <span>${esc(m.name)}</span><small>${fmtSize(m.size)}</small>` +
+        `${editable ? `<span class="rm" data-rm="${esc(m.id)}" role="button" aria-label="Remove" style="position:static;background:none;color:var(--muted)">×</span>` : ''}</button>`).join('')}</div>` : '');
+  }
+
+  // Load thumbnails for media buttons inside a container.
+  function hydrateMedia(root, urlFor) {
+    root.querySelectorAll('[data-media]').forEach(async el => {
+      const id = el.dataset.media;
+      const u = urlFor ? urlFor(id) : await Media.url(id, el.dataset.sync === '1');
+      const rm = el.querySelector('.rm');
+      if (!u) {
+        el.classList.add('missing');
+        el.innerHTML = el.dataset.sync === '1' ? 'Photo is still syncing…' : (el.dataset.kind === 'video' ? '🎬 Video saved on another device' : 'Saved on another device');
+      } else if (el.dataset.kind === 'video') {
+        el.innerHTML = `<video src="${u}" muted preload="metadata" playsinline></video><span class="play-badge" aria-hidden="true">▶</span>`;
+      } else {
+        el.innerHTML = `<img src="${u}" alt="" loading="lazy">`;
+      }
+      if (rm) el.appendChild(rm);
+    });
+  }
+
+  function renderDiaryFeed() {
+    const q = diaryQuery.trim().toLowerCase();
+    const list = state.diary
+      .filter(e => (!diaryFavOnly || e.fav) && (!q || `${e.title} ${e.text}`.toLowerCase().includes(q)))
+      .sort((a, b) => b.date.localeCompare(a.date) || b.created - a.created);
+    let html = `<button type="button" class="card diary-compose" data-diary-new><span class="avatar-sm" aria-hidden="true">✍️</span><span>What happened today? Add a memory, photo or video…</span></button>`;
+    if (state.diary.length) {
+      html += `<div class="diary-search"><input type="search" id="diary-q" placeholder="Search your memories…" value="${esc(diaryQuery)}" aria-label="Search memories">` +
+        `<button type="button" class="chip" data-diary-favs aria-pressed="${diaryFavOnly}">♥ Favorites</button></div>`;
+    }
+    if (!state.diary.length) {
+      html += `<div class="card">${emptyState('Your diary is empty', 'Capture moments, milestones and feelings. Add photos and videos to bring them back to life later.')}</div>`;
+    } else if (!list.length) {
+      html += `<div class="card">${emptyState('No matching memories', 'Try another word, or clear the search.')}</div>`;
+    } else {
+      let month = '';
+      html += '<div class="diary-feed">';
+      for (const e of list) {
+        const d = fromISO(e.date);
+        const m = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+        if (m !== month) { month = m; html += `<h2 class="diary-month-title">${esc(m)}</h2>`; }
+        const long = e.text.length > 420 || e.text.split('\n').length > 7;
+        html += `<article class="card d-entry" data-diary="${esc(e.id)}">
+          <div class="d-entry-head">
+            <div class="d-date"><b>${d.getDate()}</b><small>${esc(d.toLocaleDateString(undefined, { weekday: 'short' }))}</small></div>
+            <div class="d-title"><h3>${esc(e.title || dayLabel(e.date))}</h3>
+              <div class="todo-meta">${e.mood != null ? `<span class="pill">${MOODS[e.mood][0]} ${MOODS[e.mood][1]}</span>` : ''}${e.media.length ? `<span class="pill">📎 ${e.media.length}</span>` : ''}<span class="pill">${esc(relDay(e.date) || fmtShortDate(e.date))}</span></div></div>
+            <button type="button" class="icon-btn sm fav-btn${e.fav ? ' on' : ''}" data-diary-fav aria-pressed="${e.fav}" aria-label="Favorite" title="Favorite">${e.fav ? '♥' : '♡'}</button>
+            <button type="button" class="icon-btn sm" data-diary-edit aria-label="Edit memory" title="Edit">${ICON.pencil}</button>
+          </div>
+          ${e.text ? `<p class="d-text${long ? ' clamped' : ''}">${esc(e.text)}</p>${long ? '<button type="button" class="link-btn sm" data-diary-more>Read more</button>' : ''}` : ''}
+          ${mediaHTML(e.media, false)}
+        </article>`;
+      }
+      html += '</div>';
+    }
+    diaryEl.innerHTML = html;
+    hydrateMedia(diaryEl);
+  }
+
+  function renderDiaryMonth() {
+    const { dates, month } = monthMatrix(currentDate);
+    const today = todayISO();
+    diaryEl.innerHTML = `<div class="card month"><div class="month-head">${weekdayHeads()}</div><div class="month-grid">` +
+      dates.map(d => {
+        const es = state.diary.filter(e => e.date === d);
+        const img = es.flatMap(e => e.media).find(m => m.kind === 'image');
+        const cls = (fromISO(d).getMonth() !== month ? ' out' : '') + (d === today ? ' today' : '');
+        return `<div class="mcell${cls}" data-diary-day="${d}"><div class="mcell-top"><span class="mdate">${fromISO(d).getDate()}</span>${es.length > 1 ? `<span class="mhrs">${es.length}</span>` : ''}</div>` +
+          es.slice(0, 2).map(e => `<button type="button" class="mchip diary" data-diary-open="${esc(e.id)}"><span class="t">${e.mood != null ? MOODS[e.mood][0] + ' ' : ''}${esc(e.title || e.text.slice(0, 40) || 'Memory')}</span></button>`).join('') +
+          (img ? `<div class="mthumbs"><span class="media-item" data-media="${esc(img.id)}" data-kind="image" data-sync="${img.sync ? 1 : 0}" style="width:30px;height:30px;border-radius:6px"></span></div>` : '') +
+          `</div>`;
+      }).join('') + '</div></div>';
+    hydrateMedia(diaryEl);
+  }
+
+  function openDiaryDialog(entry) {
+    const e = entry || { date: currentDate > todayISO() ? todayISO() : currentDate, title: '', text: '', mood: null, media: [] };
+    editingDiaryId = entry?.id || null;
+    draft = e.media.map(m => ({ meta: m }));
+    removedMedia = [];
+    $('#dd-title').textContent = entry ? 'Edit memory' : 'New memory';
+    $('#dd-name').value = e.title;
+    $('#dd-date').value = e.date;
+    $('#dd-text').value = e.text;
+    $('#dd-mood').innerHTML = '<option value="">No mood</option>' + MOODS.map(([emo, l], i) => `<option value="${i}"${e.mood === i ? ' selected' : ''}>${emo} ${l}</option>`).join('');
+    $('#dd-delete').hidden = !entry;
+    $('#dd-error').hidden = true;
+    $('#dd-storage').textContent = document.body.dataset.auth === 'in'
+      ? 'Photos sync to your account. Videos and other files stay on this device (up to 200 MB each).'
+      : 'Saved on this device. Sign in to sync photos across your devices.';
+    renderDraft();
+    ddDialog.showModal();
+    if (!entry) $('#dd-text').focus();
+  }
+
+  function renderDraft() {
+    const box = $('#dd-preview');
+    box.innerHTML = mediaHTML(draft.map(d => d.meta), true);
+    const local = new Map(draft.filter(d => d.url).map(d => [d.meta.id, d.url]));
+    hydrateMedia(box, id => local.get(id) || null);
+    // Existing media (already saved) loads from storage.
+    box.querySelectorAll('[data-media]').forEach(async el => {
+      if (local.has(el.dataset.media)) return;
+      const u = await Media.url(el.dataset.media, el.dataset.sync === '1');
+      const rm = el.querySelector('.rm');
+      if (u) el.innerHTML = el.dataset.kind === 'video' ? `<video src="${u}" muted preload="metadata"></video><span class="play-badge">▶</span>` : `<img src="${u}" alt="">`;
+      if (rm) el.appendChild(rm);
+    });
+  }
+
+  async function addFiles(files) {
+    const err = $('#dd-error');
+    err.hidden = true;
+    for (const f of files) {
+      if (f.size > MAX_FILE) { showError(err, `“${f.name}” is larger than 200 MB.`); continue; }
+      let kind = kindOf(f.type || '');
+      const meta = { id: 'm' + uid(), kind, name: f.name || 'file', mime: f.type || 'application/octet-stream', size: f.size, sync: false };
+      let blob = f, dataUrl = null;
+      if (kind === 'image' && !/gif|svg/.test(f.type)) {
+        try {
+          ({ blob, dataUrl } = await compressImage(f));
+          Object.assign(meta, { mime: 'image/jpeg', size: blob.size, sync: true });
+        } catch { meta.kind = kind = 'file'; }
+      }
+      draft.push({ meta, blob, dataUrl, url: URL.createObjectURL(blob), isNew: true });
+    }
+    renderDraft();
+  }
+  $('#dd-files').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+  const drop = $('#dd-drop');
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); addFiles([...e.dataTransfer.files]); });
+  $('#dd-preview').addEventListener('click', e => {
+    const rm = e.target.closest('[data-rm]');
+    if (!rm) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const id = rm.dataset.rm;
+    const d = draft.find(x => x.meta.id === id);
+    if (d && !d.isNew) removedMedia.push(d.meta);
+    if (d?.url) URL.revokeObjectURL(d.url);
+    draft = draft.filter(x => x.meta.id !== id);
+    renderDraft();
+  });
+
+  $('#diary-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const text = $('#dd-text').value.trim(), title = $('#dd-name').value.trim(), date = $('#dd-date').value;
+    if (!isISO(date)) return showError($('#dd-error'), 'Pick a date.');
+    if (!text && !title && !draft.length) return showError($('#dd-error'), 'Write something or add a photo first.');
+    const save$ = $('#dd-save');
+    save$.disabled = true;
+    try {
+      for (const d of draft.filter(x => x.isNew)) {
+        await Media.put(d.meta.id, d.blob);
+        if (d.meta.sync && remote.upload) remote.upload(d.meta.id, d.dataUrl, d.meta).catch(() => {});
+      }
+    } catch {
+      save$.disabled = false;
+      return showError($('#dd-error'), 'Couldn’t save the files on this device (storage may be full).');
+    }
+    removedMedia.forEach(m => { Media.del(m.id); remote.remove?.(m.id); });
+    const mood = $('#dd-mood').value === '' ? null : +$('#dd-mood').value;
+    const data = { title, text, date, mood, media: draft.map(d => d.meta) };
+    const existing = editingDiaryId && state.diary.find(x => x.id === editingDiaryId);
+    if (existing) Object.assign(existing, data);
+    else state.diary.push({ id: 'd' + uid(), fav: false, created: Date.now(), ...data });
+    draft.forEach(d => { if (d.url) URL.revokeObjectURL(d.url); });
+    save$.disabled = false;
+    save();
+    ddDialog.close();
+    if (mode() !== 'diary') setMode('diary'); else renderAll();
+    toast(existing ? 'Memory updated.' : 'Memory saved. 💜');
+  });
+
+  $('#dd-delete').addEventListener('click', () => {
+    const entry = state.diary.find(x => x.id === editingDiaryId);
+    if (!entry) return;
+    ddDialog.close();
+    withUndo('Memory deleted', () => { state.diary = state.diary.filter(x => x.id !== entry.id); });
+    // Remove the files a little later, unless the delete was undone.
+    setTimeout(() => {
+      if (state.diary.some(x => x.id === entry.id)) return;
+      entry.media.forEach(m => { Media.del(m.id); remote.remove?.(m.id); });
+    }, 8000);
+  });
+
+  function openLightbox(id, kind) {
+    const lb = $('#lightbox');
+    Media.url(id, true).then(u => {
+      if (!u) { toast('This file is saved on another device.'); return; }
+      const meta = state.diary.flatMap(e => e.media).find(m => m.id === id);
+      lb.innerHTML = `<div class="lb-bar"><a href="${u}" download="${esc(meta?.name || 'memory')}">Download</a><button type="button" data-lb-close>Close</button></div>` +
+        (kind === 'video' ? `<video src="${u}" controls autoplay playsinline></video>` : `<img src="${u}" alt="">`);
+      lb.hidden = false;
+    });
+  }
+  $('#lightbox').addEventListener('click', e => {
+    if (e.target.closest('a')) return;
+    if (e.target.closest('[data-lb-close]') || e.target.id === 'lightbox') { $('#lightbox').hidden = true; $('#lightbox').innerHTML = ''; }
+  });
+
+  diaryEl.addEventListener('input', e => {
+    if (e.target.id !== 'diary-q') return;
+    diaryQuery = e.target.value;
+    const pos = e.target.selectionStart;
+    renderDiaryFeed();
+    const q = $('#diary-q');
+    if (q) { q.focus(); q.setSelectionRange(pos, pos); }
+  });
+  diaryEl.addEventListener('click', e => {
+    if (e.target.closest('[data-diary-new]')) { openDiaryDialog(); return; }
+    if (e.target.closest('[data-diary-favs]')) { diaryFavOnly = !diaryFavOnly; renderDiaryFeed(); return; }
+    const media = e.target.closest('[data-media]');
+    if (media && !media.classList.contains('missing') && state.settings.diaryView !== 'month') { openLightbox(media.dataset.media, media.dataset.kind); return; }
+    const file = e.target.closest('[data-file]');
+    if (file) {
+      Media.url(file.dataset.file).then(u => {
+        if (!u) { toast('This file is saved on another device.'); return; }
+        const a = document.createElement('a');
+        a.href = u; a.download = file.dataset.name; document.body.appendChild(a); a.click(); a.remove();
+      });
+      return;
+    }
+    const openId = e.target.closest('[data-diary-open]')?.dataset.diaryOpen;
+    if (openId) { openDiaryDialog(state.diary.find(x => x.id === openId)); return; }
+    const day = e.target.closest('[data-diary-day]');
+    if (day) { currentDate = day.dataset.diaryDay; openDiaryDialog(); return; }
+    const card = e.target.closest('[data-diary]');
+    const entry = card && state.diary.find(x => x.id === card.dataset.diary);
+    if (!entry) return;
+    if (e.target.closest('[data-diary-edit]')) openDiaryDialog(entry);
+    else if (e.target.closest('[data-diary-fav]')) { entry.fav = !entry.fav; save(); renderDiaryFeed(); }
+    else if (e.target.closest('[data-diary-more]')) { card.querySelector('.d-text')?.classList.remove('clamped'); e.target.remove(); }
+  });
+
+  // ---------- Learn: how-to guide and lessons ----------
+  const learnEl = $('#learn-content');
+  let learnOpen = null;   // { type: 'guide' | 'lesson', id }
+  let learnCat = 'All';
+  const learnData = () => window.DAYBLOCK_LEARN || { guide: [], lessons: [] };
+  const isLearned = id => state.learn.done.includes(id);
+
+  function renderLearn() {
+    const L = learnData();
+    if (learnOpen) { renderReader(L); return; }
+    if (state.settings.learnView === 'lessons') renderLessons(L); else renderGuide(L);
+  }
+  const ringHTML = (done, total) => `<div class="ring" style="--p:${total ? Math.round(done / total * 100) : 0}"><span>${done}/${total}</span></div>`;
+
+  function renderGuide(L) {
+    const done = L.guide.filter(g => isLearned(g.id)).length;
+    learnEl.innerHTML = `
+      <div class="card learn-hero"><div><span class="eyebrow">Getting started</span><h2>Welcome to Dayblock 👋</h2>
+        <p>A quick tour of everything the app can do, from planning your first day to tracking time, setting life goals and keeping a diary. Each step takes about a minute.</p></div>
+        <div class="learn-progress">${ringHTML(done, L.guide.length)}<small>steps read</small></div></div>
+      <div class="guide-toc">${L.guide.map((g, i) => `
+        <button type="button" class="card guide-step" data-learn="guide:${esc(g.id)}">
+          <span class="g-num">${isLearned(g.id) ? '✓' : i + 1}</span>
+          <span><h3>${esc(g.icon)} ${esc(g.title)}</h3><p>${esc(g.summary)}</p></span>
+        </button>`).join('')}</div>`;
+  }
+
+  function renderLessons(L) {
+    const done = L.lessons.filter(l => isLearned(l.id)).length;
+    const catsL = ['All', ...new Set(L.lessons.map(l => l.cat))];
+    const list = L.lessons.filter(l => learnCat === 'All' || l.cat === learnCat);
+    learnEl.innerHTML = `
+      <div class="card learn-hero"><div><span class="eyebrow">Learn & grow</span><h2>Master your time, grow your life</h2>
+        <p>Short, practical lessons on time management, focus, goals, habits and wellbeing. Each one ends with something to try in Dayblock right away.</p></div>
+        <div class="learn-progress">${ringHTML(done, L.lessons.length)}<small>lessons completed</small></div></div>
+      <div class="learn-cats">${catsL.map(c => `<button type="button" class="chip" data-learn-cat="${esc(c)}" aria-pressed="${c === learnCat}">${esc(c)}</button>`).join('')}</div>
+      <div class="lesson-grid">${list.map(l => `
+        <button type="button" class="card lesson-card${isLearned(l.id) ? ' done' : ''}" data-learn="lesson:${esc(l.id)}">
+          <span class="l-icon" aria-hidden="true">${esc(l.icon)}</span>
+          <h3>${esc(l.title)}</h3><p>${esc(l.summary)}</p>
+          <span class="l-meta"><span class="pill">${esc(l.cat)}</span><span class="pill">${l.minutes} min read</span>${isLearned(l.id) ? '<span class="pill good">✓ Done</span>' : ''}</span>
+        </button>`).join('')}</div>`;
+  }
+
+  function renderReader(L) {
+    const list = learnOpen.type === 'guide' ? L.guide : L.lessons;
+    const i = list.findIndex(x => x.id === learnOpen.id);
+    const item = list[i];
+    if (!item) { learnOpen = null; renderLearn(); return; }
+    const next = list[i + 1];
+    learnEl.innerHTML = `<div class="reader">
+      <button type="button" class="btn sm reader-back" data-learn-back>← ${learnOpen.type === 'guide' ? 'All steps' : 'All lessons'}</button>
+      <article class="card reader-card">
+        <span class="eyebrow">${learnOpen.type === 'guide' ? `Step ${i + 1} of ${list.length}` : esc(item.cat)}</span>
+        <h1>${esc(item.icon)} ${esc(item.title)}</h1>
+        <div class="r-meta">${item.minutes ? `<span class="pill">${item.minutes} min read</span>` : ''}${isLearned(item.id) ? '<span class="pill good">✓ Completed</span>' : ''}</div>
+        <div class="r-body">${item.body}</div>
+        ${item.takeaways?.length ? `<div class="takeaways"><h3>Key takeaways</h3><ul>${item.takeaways.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}
+        ${item.try?.length ? `<div class="try-it"><h3>Try it in Dayblock</h3><div class="btn-row">${item.try.map((t, k) => `<button type="button" class="btn" data-learn-try="${k}">${esc(t.label)}</button>`).join('')}</div></div>` : ''}
+        <div class="reader-foot">
+          <button type="button" class="btn${isLearned(item.id) ? '' : ' primary'}" data-learn-done>${isLearned(item.id) ? '✓ Completed' : 'Mark as complete'}</button>
+          ${next ? `<button type="button" class="btn" data-learn="${learnOpen.type}:${esc(next.id)}">Next: ${esc(next.title)} →</button>` : ''}
+        </div>
+      </article></div>`;
+    learnEl.querySelector('.reader')?.scrollIntoView({ block: 'start' });
+    scrollTo({ top: 0 });
+  }
+
+  // "Try it" buttons from lessons and guide steps.
+  function learnAction(a) {
+    const today = todayISO();
+    switch (a.action) {
+      case 'block': {
+        const len = a.minutes || 60;
+        const [lo, hi] = dayBounds();
+        const s = nextFreeSlot(today, len) ?? clamp(9 * 60, lo, hi - len);
+        currentDate = today;
+        state.settings.tbView = 'day';
+        setMode('timeblock');
+        openBlockDialog({ date: today, start: s, end: Math.min(s + len, hi), title: a.title || '', category: cats().some(c => c.id === a.cat) ? a.cat : defaultCat() });
+        break;
+      }
+      case 'task': {
+        const repeat = a.repeat ? normRepeat(a.repeat) : null;
+        let due = a.due === 'today' ? today : a.due === 'sunday' ? nextDow(addDays(today, -1), 0) : '';
+        if (repeat && !due) due = today;
+        addTask({ title: a.title, repeat, due, estimate: a.estimate || 0, priority: a.priority || 'med', category: defaultCat() });
+        renderAll();
+        toast(`Added “${a.title}” to your to-do list${repeat ? ` (${describeRepeat(repeat, due)})` : ''}.`);
+        break;
+      }
+      case 'view':
+        if (a.view) state.settings[VIEW_KEY[a.mode]] = a.view;
+        learnOpen = null;
+        setMode(a.mode);
+        break;
+      case 'diary': setMode('diary'); openDiaryDialog(); break;
+      case 'settings': openSettings(); break;
+    }
+  }
+
+  learnEl.addEventListener('click', e => {
+    const open = e.target.closest('[data-learn]');
+    if (open) { const [type, id] = open.dataset.learn.split(':'); learnOpen = { type, id }; renderAll(); return; }
+    if (e.target.closest('[data-learn-back]')) { learnOpen = null; renderAll(); return; }
+    const cat = e.target.closest('[data-learn-cat]');
+    if (cat) { learnCat = cat.dataset.learnCat; renderLearn(); return; }
+    const L = learnData();
+    const list = learnOpen?.type === 'guide' ? L.guide : L.lessons;
+    const item = learnOpen && list.find(x => x.id === learnOpen.id);
+    if (!item) return;
+    if (e.target.closest('[data-learn-done]')) {
+      const d = state.learn.done;
+      state.learn.done = d.includes(item.id) ? d.filter(x => x !== item.id) : [...d, item.id];
+      save();
+      renderAll();
+      if (state.learn.done.includes(item.id)) toast('Nice! Marked as complete. 🎓');
+      return;
+    }
+    const tryBtn = e.target.closest('[data-learn-try]');
+    if (tryBtn) {
+      if (!isLearned(item.id)) { state.learn.done = [...state.learn.done, item.id]; save(); }
+      learnAction(item.try[+tryBtn.dataset.learnTry]);
+    }
+  });
+
   // ---------- Timer bar ----------
   function renderTimerBar() {
     const t = state.timer;
@@ -1679,10 +2601,28 @@
     const total = trackedMs(t.ref);
     const planned = plannedForRef(t.ref);
     timerClock.textContent = fmtClock(total);
-    const open = openEntry();
-    timerSub.textContent = (t.status === 'paused' ? 'Paused' : `This session ${fmtClock(open ? Date.now() - open.start : 0)}`) +
-      (planned ? ` · planned ${fmtDur(planned)}${total / 60000 > planned ? ' (over)' : ''}` : '');
+    const today = todayISO();
+    const span = actualSpan(t.ref, today);
+    const slot = plannedSlot(t.ref, today);
+    const parts = [];
+    if (span) parts.push(`Started ${esc(fmtTs(span.start))}` + (slot ? ` (${deltaLabel(span.start, today, slot.start, 'start')})` : ''));
+    parts.push(t.status === 'paused' ? 'Paused' : `Now ${esc(fmtTs(Date.now()))}`);
+    if (slot) parts.push(`Plan ${esc(fmtTime(slot.start))}–${esc(fmtTime(slot.end))}`);
+    else if (planned) parts.push(`Planned ${fmtDur(planned)}`);
+    if (planned && total / 60000 > planned) parts.push('<span class="late">over time</span>');
+    timerSub.innerHTML = parts.join(' · ');
     timerToggle.textContent = t.status === 'paused' ? 'Resume' : 'Pause';
+  }
+
+  // The planned slot for an item on a date: the block itself, or the task's block that day.
+  function plannedSlot(ref, date) {
+    if (ref.startsWith('block:')) {
+      const o = findOcc(ref.slice(6));
+      return o && o.date === date ? { start: o.start, end: o.end } : null;
+    }
+    const id = ref.slice(5);
+    const b = state.blocks.find(x => x.taskId === id && occursOn(x, date));
+    return b ? { start: b.start, end: b.end } : null;
   }
   timerToggle.addEventListener('click', () => {
     if (!state.timer) return;
@@ -1691,12 +2631,15 @@
   $('#timer-stop').addEventListener('click', stopTimer);
 
   // ---------- Category & repeat editors ----------
+  // Category chips; rebuilt on every open so custom categories show up.
   function catPicker(el, name) {
-    el.innerHTML = CATEGORIES.map(c =>
-      `<label class="cat-opt cat-${c.id}"><input type="radio" name="${name}" value="${c.id}"><span>${c.name}</span></label>`).join('');
+    const build = () => {
+      el.innerHTML = cats().map(c =>
+        `<label class="cat-opt cat-${c.id}"><input type="radio" name="${name}" value="${c.id}"><span>${esc(c.name)}</span></label>`).join('');
+    };
     return {
-      set: v => el.querySelectorAll('input').forEach(i => { i.checked = i.value === v; }),
-      get: () => el.querySelector('input:checked')?.value || 'work',
+      set: v => { build(); const id = cats().some(c => c.id === v) ? v : defaultCat(); el.querySelectorAll('input').forEach(i => { i.checked = i.value === id; }); },
+      get: () => el.querySelector('input:checked')?.value || defaultCat(),
     };
   }
 
@@ -1747,13 +2690,25 @@
     };
   }
 
-  function renderTrackRow(el, ref) {
+  function renderTrackRow(el, ref, date) {
     const ms = trackedMs(ref);
     const planned = plannedForRef(ref);
     const timing = state.timer?.ref === ref;
     const running = timing && state.timer.status === 'running';
+    // Actual start/finish, compared with the plan when there is one.
+    const es = state.entries.filter(e => e.ref === ref);
+    let times = '';
+    if (es.length) {
+      const first = Math.min(...es.map(e => e.start));
+      const lastEnd = Math.max(...es.map(e => e.end ?? Date.now()));
+      const d = date || toISO(new Date(first));
+      const slot = plannedSlot(ref, d);
+      times = `<span class="track-times">Started <b>${esc(fmtTs(first))}</b>${slot ? ` (${deltaLabel(first, d, slot.start, 'start')})` : ''}` +
+        ` · ${es.some(e => e.end == null) ? 'still running' : `finished <b>${esc(fmtTs(lastEnd))}</b>${slot ? ` (${deltaLabel(lastEnd, d, slot.end, 'end')})` : ''}`}` +
+        ` · ${es.length} session${es.length === 1 ? '' : 's'}</span>`;
+    }
     el.innerHTML =
-      `<div class="track-text">Tracked <b>${fmtDur(ms / 60000)}</b>${planned ? ` of <b>${fmtDur(planned)}</b> planned` : ''}${running ? ' · <b>running</b>' : timing ? ' · paused' : ''}</div>` +
+      `<div class="track-text">Tracked <b>${fmtDur(ms / 60000)}</b>${planned ? ` of <b>${fmtDur(planned)}</b> planned` : ''}${running ? ' · <b>running</b>' : timing ? ' · paused' : ''}${times}</div>` +
       `<button type="button" class="btn sm${running ? '' : ' primary'}" data-track="toggle">${running ? ICON.pause + 'Pause' : ICON.play + (timing ? 'Resume' : 'Start timer')}</button>` +
       (timing ? `<button type="button" class="btn sm" data-track="stop" title="Stop tracking and mark complete">Stop</button>` : '');
   }
@@ -1805,9 +2760,14 @@
     bCat.set(src.category || lastCategory);
     bRepeat.set(src.repeat || null);
     bDelete.hidden = !data.b;
+    $('#b-postpone').hidden = !data.b || data.done;
     bError.hidden = true;
     bTrack.hidden = !data.b;
-    if (data.b) renderTrackRow(bTrack, data.ref);
+    if (data.b) renderTrackRow(bTrack, data.ref, data.date);
+    const linkedTask = data.b?.taskId && findTask(data.b.taskId);
+    const hist = linkedTask ? linkedTask.postponed : data.b?.postponed;
+    $('#b-history').innerHTML = historyHTML(hist);
+    $('#b-history').hidden = !hist?.length;
     blockDialog.showModal();
     if (!data.b) bTitle.focus();
   }
@@ -1817,7 +2777,7 @@
     if (!b || !editingOcc) return;
     if (b.dataset.track === 'stop') { stopTimer(); blockDialog.close(); return; }
     toggleTimer(editingOcc.ref);
-    renderTrackRow(bTrack, editingOcc.ref);
+    renderTrackRow(bTrack, editingOcc.ref, editingOcc.date);
   });
 
   blockForm.addEventListener('submit', async e => {
@@ -1837,18 +2797,22 @@
     const date = bDate.value;
     const data = { title, start, end, category, notes: bNotes.value.trim(), repeat };
 
+    const snapshot = JSON.stringify(state);
+    let later = null;
     if (!editingOcc) {
-      state.blocks.push({ id: uid(), date, ...data, skip: [], doneOn: [], ...(pendingTaskId ? { taskId: pendingTaskId } : {}) });
+      state.blocks.push({ id: uid(), date, ...data, skip: [], doneOn: [], postponed: [], ...(pendingTaskId ? { taskId: pendingTaskId } : {}) });
     } else {
       const { b, date: occDate } = editingOcc;
       if (!b.repeat) {
         const oldRef = `block:${b.id}@${b.date}`;
+        const oldDate = b.date;
         Object.assign(b, data, { date });
         if (!b.taskId) remapRef(oldRef, `block:${b.id}@${date}`);
+        if (!data.repeat) later = markMovedLater(b, oldDate, date);
       } else {
         const scope = await askScope('Edit repeating block', 'This block repeats. Which ones should change?', occDate > b.date);
         if (scope === 'cancel') return;
-        if (scope === 'one') detach(b, occDate, { ...data, date, repeat: null });
+        if (scope === 'one') later = markMovedLater(detach(b, occDate, { ...data, date, repeat: null }), occDate, date);
         else if (scope === 'future') splitFuture(b, occDate, { ...data, date });
         else {
           const shift = dayNum(date) - dayNum(occDate);
@@ -1863,10 +2827,13 @@
     const [a, z] = periodRange();
     if (date < a || date > z) {
       currentDate = date;
-      toast(`Saved to ${dayLabel(date)}`);
+      if (!later) toast(`Saved to ${dayLabelIn(date)}`);
     }
     renderAll();
+    postponedToast(later, date, snapshot);
   });
+
+  $('#b-postpone').addEventListener('click', () => { if (editingOcc) openPostpone({ kind: 'occ', occ: editingOcc }); });
 
   bDelete.addEventListener('click', async () => {
     if (!editingOcc) return;
@@ -1908,6 +2875,14 @@
     tTrack.hidden = t.done && !state.entries.some(e => e.ref === 'task:' + t.id);
     renderTrackRow(tTrack, 'task:' + t.id);
     if (t.done) tTrack.querySelectorAll('[data-track]').forEach(b => b.remove());
+    // "Starts after": any other open task that isn't already waiting on this one (no loops).
+    const blocked = chainAfter(t.id);
+    const choices = sortTasks(state.tasks.filter(x => x.id !== t.id && !blocked.has(x.id) && (!x.done || x.id === t.after)));
+    $('#t-after').innerHTML = '<option value="">Nothing, it can start any time</option>' +
+      choices.map(x => `<option value="${esc(x.id)}"${x.id === t.after ? ' selected' : ''}>${esc(x.title)}${taskDate(x) ? ` (${esc(fmtShortDate(taskDate(x)))})` : ''}</option>`).join('');
+    $('#t-history').innerHTML = historyHTML(t.postponed);
+    $('#t-history').hidden = !t.postponed.length;
+    $('#t-postpone').hidden = t.done;
     taskDialog.showModal();
   }
 
@@ -1930,16 +2905,105 @@
     let due = tDue.value;
     if (repeat && !due) due = todayISO();
     if (repeat?.until && repeat.until < due) return showError(tError, 'The repeat end date is before the due date.');
-    Object.assign(t, { title, priority: tPriority.value, due, notes: tNotes.value.trim(), estimate: +tEstimate.value || 0, category: tCat.get(), repeat });
+    const after = $('#t-after').value;
+    const pred = after && findTask(after);
+    let note = '';
+    // A linked task can't be due before the task it waits for.
+    if (pred && taskDate(pred) && due && due < taskDate(pred)) { due = taskDate(pred); note = ` Due date moved to ${dayLabelIn(due)} so it comes after “${pred.title}”.`; }
+    const snapshot = JSON.stringify(state);
+    const oldDue = t.due;
+    Object.assign(t, { title, priority: tPriority.value, due, notes: tNotes.value.trim(), estimate: +tEstimate.value || 0, category: tCat.get(), repeat, after: pred ? after : '' });
+    let later = null;
+    if (oldDue && due && due > oldDue && !note) {
+      const days = dayNum(due) - dayNum(oldDue);
+      addHistory(t, oldDue, due, '');
+      const visited = new Set([t.id]);
+      later = { count: t.postponed.length, linked: sum(successorsOf(t.id), s => shiftTask(s, days, `Moved with “${t.title}”`, visited)) };
+    }
     save();
     taskDialog.close();
     renderAll();
+    if (later) postponedToast(later, due, snapshot);
+    else if (note) toast(note.trim());
   });
 
   tDelete.addEventListener('click', () => {
     const t = findTask(editingTaskId);
     taskDialog.close();
     if (t) withUndo(`Deleted “${t.title}”`, () => deleteTask(t.id));
+  });
+  $('#t-postpone').addEventListener('click', () => { const t = findTask(editingTaskId); if (t) openPostpone({ kind: 'task', task: t }); });
+
+  // ---------- Postpone dialog ----------
+  const ppDialog = $('#postpone-dialog'), ppDate = $('#pp-date'), ppReason = $('#pp-reason'), ppOpts = $('#pp-opts'), ppChain = $('#pp-chain'), ppError = $('#pp-error');
+  let ppTarget = null;
+  const ppFrom = () => (ppTarget.kind === 'task' ? (taskDate(ppTarget.task) || todayISO()) : ppTarget.occ.date);
+  const ppTask = () => (ppTarget.kind === 'task' ? ppTarget.task : (ppTarget.occ.b.taskId && !ppTarget.occ.b.repeat ? findTask(ppTarget.occ.b.taskId) : null));
+  function nextDow(from, dow) { let d = addDays(from, 1); while (dowOf(d) !== dow) d = addDays(d, 1); return d; }
+  function openPostpone(target) {
+    ppTarget = target;
+    const from = ppFrom();
+    const base = from > todayISO() ? from : todayISO();
+    const title = target.kind === 'task' ? target.task.title : target.occ.title;
+    $('#pp-what').textContent = `“${title}” is planned for ${dayLabelIn(from)}. Move it to:`;
+    const opts = [];
+    const add = (label, d) => { if (d > from && !opts.some(o => o[1] === d)) opts.push([label, d]); };
+    add('Tomorrow', addDays(base, 1));
+    add('This weekend', nextDow(base, 6));
+    add('Next week', nextDow(base, state.settings.weekStart));
+    add('In 3 days', addDays(base, 3));
+    ppOpts.innerHTML = opts.slice(0, 3).map(([l, d]) => `<button type="button" data-pp="${d}"><b>${l}</b><small>${esc(fmtShortDate(d))}</small></button>`).join('');
+    ppDate.min = addDays(from, 1);
+    ppReason.value = '';
+    ppError.hidden = true;
+    selectPP(opts[0][1]);
+    ppDialog.showModal();
+  }
+  function selectPP(d) {
+    ppDate.value = d;
+    ppOpts.querySelectorAll('[data-pp]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pp === d)));
+    const t = ppTask();
+    const n = t ? chainAfter(t.id).size : 0;
+    const days = d ? dayNum(d) - dayNum(ppFrom()) : 0;
+    ppChain.hidden = !n || days <= 0;
+    ppChain.innerHTML = `🔗 ${n} linked task${n === 1 ? '' : 's'} after this will also move ${days} day${days === 1 ? '' : 's'} later.`;
+  }
+  ppOpts.addEventListener('click', e => { const b = e.target.closest('[data-pp]'); if (b) selectPP(b.dataset.pp); });
+  ppDate.addEventListener('input', () => selectPP(ppDate.value));
+  $('#postpone-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const to = ppDate.value;
+    const from = ppFrom();
+    if (!isISO(to) || to <= from) return showError(ppError, `Pick a date after ${fmtShortDate(from)}.`);
+    const snapshot = JSON.stringify(state);
+    const reason = ppReason.value;
+    const linked = ppTarget.kind === 'task' ? postponeTask(ppTarget.task, to, reason) : postponeOcc(ppTarget.occ, to, reason);
+    if (linked < 0) return showError(ppError, 'That date isn’t later than the current one.');
+    const t = ppTask();
+    const count = t ? t.postponed.length : (state.blocks.find(b => b.postponed?.some(p => p.to === to && p.from === from))?.postponed.length || 1);
+    save();
+    ppDialog.close();
+    if (blockDialog.open) blockDialog.close();
+    if (taskDialog.open) taskDialog.close();
+    renderAll();
+    postponedToast({ count, linked }, to, snapshot);
+  });
+
+  // Late-chain banner actions
+  bannerEl.addEventListener('click', e => {
+    const b = e.target.closest('[data-late-act]');
+    const t = b && findTask(b.closest('[data-late]').dataset.late);
+    if (!t) return;
+    const act = b.dataset.lateAct;
+    if (act === 'pick') { openPostpone({ kind: 'task', task: t }); return; }
+    if (act === 'done') { setTaskDone(t, true); return; }
+    if (act === 'dismiss') { state.lateSeen[t.id] = String(taskDeadline(t)); save(); renderBanner(); return; }
+    const snapshot = JSON.stringify(state);
+    const linked = pushChainToTomorrow(t);
+    save();
+    renderAll();
+    toast(`Moved “${t.title}” and ${linked} linked task${linked === 1 ? '' : 's'} to ${dayLabelIn(taskDate(t))}.`,
+      () => { state = normalize(JSON.parse(snapshot)); save(); renderAll(); });
   });
 
   // Close buttons and backdrop clicks for all dialogs
@@ -1957,8 +3021,71 @@
     sEnd.value = state.settings.dayEnd;
     sWeek.value = state.settings.weekStart;
     sTheme.value = state.settings.theme;
+    $('#s-chain').value = state.settings.chainMode;
+    $('#s-look').querySelectorAll('input').forEach(i => { i.checked = i.value === state.settings.look; });
+    renderCatEditor();
     settingsDialog.showModal();
   }
+
+  // Looks
+  $('#s-look').addEventListener('change', e => {
+    if (!e.target.matches('input[name="look"]')) return;
+    state.settings.look = e.target.value;
+    save();
+    applyTheme();
+    renderAll();
+  });
+  $('#s-chain').addEventListener('change', e => { state.settings.chainMode = e.target.value; save(); checkLateChains(); });
+
+  // Categories editor
+  function renderCatEditor() {
+    const used = id => state.tasks.filter(t => t.category === id).length + state.blocks.filter(b => b.category === id).length;
+    $('#s-cats').innerHTML = cats().map(c => `
+      <div class="cat-edit-row cat-${c.id}" data-cat="${esc(c.id)}">
+        <input type="color" value="${esc(c.color)}" aria-label="Color for ${esc(c.name)}" data-cat-color>
+        <input type="text" value="${esc(c.name)}" maxlength="30" aria-label="Category name" data-cat-name>
+        <span class="count">${used(c.id)} item${used(c.id) === 1 ? '' : 's'}</span>
+        ${c.id === 'other' ? '<span class="icon-btn sm" aria-hidden="true"></span>' : `<button type="button" class="icon-btn sm" data-cat-del aria-label="Delete ${esc(c.name)}" title="Delete (items move to Other)">${ICON.trash}</button>`}
+      </div>`).join('');
+    $('#s-cat-color').value = CAT_SWATCHES.find(s => !cats().some(c => c.color.toLowerCase() === s)) || '#14b8a6';
+  }
+  $('#s-cats').addEventListener('input', e => {
+    const row = e.target.closest('[data-cat]');
+    const c = row && cats().find(x => x.id === row.dataset.cat);
+    if (!c) return;
+    if (e.target.matches('[data-cat-color]')) { c.color = e.target.value; applyCategoryStyles(); }
+    if (e.target.matches('[data-cat-name]')) c.name = e.target.value.trim() || 'Untitled';
+    save();
+  });
+  $('#s-cats').addEventListener('change', () => renderAll());
+  $('#s-cats').addEventListener('click', e => {
+    const del = e.target.closest('[data-cat-del]');
+    if (!del) return;
+    const id = del.closest('[data-cat]').dataset.cat;
+    const c = cats().find(x => x.id === id);
+    if (!c) return;
+    withUndo(`Deleted category “${c.name}”. Its items moved to Other.`, () => {
+      state.categories = state.categories.filter(x => x.id !== id);
+      state.tasks.forEach(t => { if (t.category === id) t.category = 'other'; });
+      state.blocks.forEach(b => { if (b.category === id) b.category = 'other'; });
+      if (lastCategory === id) lastCategory = defaultCat();
+    });
+    applyCategoryStyles();
+    renderCatEditor();
+  });
+  $('#s-cat-add').addEventListener('submit', e => {
+    e.preventDefault();
+    const name = $('#s-cat-name').value.trim();
+    if (!name) { $('#s-cat-name').focus(); return; }
+    if (cats().some(c => c.name.toLowerCase() === name.toLowerCase())) { toast(`You already have a “${name}” category.`); return; }
+    state.categories.push({ id: 'c' + uid(), name: name.slice(0, 30), color: $('#s-cat-color').value });
+    $('#s-cat-name').value = '';
+    save();
+    applyCategoryStyles();
+    renderCatEditor();
+    renderAll();
+    toast(`Added “${name}”. Pick it when you create a block or task.`);
+  });
 
   sStart.addEventListener('change', () => {
     const v = +sStart.value;
@@ -2206,17 +3333,22 @@
     if (!d.moved) { openBlockDialog(o); return; }
     if (d.newStart === o.start && d.newEnd === o.end && d.newDate === o.date) { renderTimeblock(); return; }
     const b = o.b;
+    const snapshot = JSON.stringify(state);
+    let later = null;
     if (b.repeat) {
-      detach(b, o.date, { date: d.newDate, start: d.newStart, end: d.newEnd });
-      toast('Changed this occurrence only.');
+      const nb = detach(b, o.date, { date: d.newDate, start: d.newStart, end: d.newEnd });
+      later = markMovedLater(nb, o.date, d.newDate);
+      if (!later) toast('Changed this occurrence only.');
     } else {
       const oldRef = `block:${b.id}@${b.date}`;
       Object.assign(b, { date: d.newDate, start: d.newStart, end: d.newEnd });
       if (!b.taskId) remapRef(oldRef, `block:${b.id}@${b.date}`);
       if (b.doneOn.length) b.doneOn = [b.date];
+      later = markMovedLater(b, o.date, d.newDate);
     }
     save();
     renderAll();
+    postponedToast(later, d.newDate, snapshot);
   }
   tbMain.addEventListener('pointerup', e => endDrag(e, false));
   tbMain.addEventListener('pointercancel', e => endDrag(e, true));
@@ -2289,10 +3421,10 @@
   });
 
   // ---------- Other event wiring ----------
-  modeBtns.forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+  modeBtns.forEach(b => b.addEventListener('click', () => { if (b.dataset.mode === 'learn') learnOpen = null; setMode(b.dataset.mode); scrollTo({ top: 0 }); }));
   viewSwitch.addEventListener('click', e => {
     const b = e.target.closest('[data-view]');
-    if (b) setView(b.dataset.view);
+    if (b) { if (mode() === 'learn') learnOpen = null; setView(b.dataset.view); }
   });
   $('#settings-btn').addEventListener('click', openSettings);
   $('#prev-btn').addEventListener('click', () => step(-1));
@@ -2324,7 +3456,7 @@
     if (e.target.closest('[data-act="schedule"]')) {
       const date = state.settings.tbView === 'day' || currentDate >= todayISO() ? currentDate : todayISO();
       const b = scheduleTask(t, date);
-      if (b) toast(`Scheduled “${t.title}” ${dayLabel(b.date).toLowerCase()} at ${fmtTime(b.start)}`);
+      if (b) toast(`Scheduled “${t.title}” ${dayLabelIn(b.date)} at ${fmtTime(b.start)}`);
     } else {
       openTaskDialog(t);
     }
@@ -2386,9 +3518,10 @@
       case 'edit': openTaskDialog(t); break;
       case 'delete': withUndo(`Deleted “${t.title}”`, () => deleteTask(t.id)); break;
       case 'track': toggleTimer('task:' + t.id); break;
+      case 'postpone': openPostpone({ kind: 'task', task: t }); break;
       case 'schedule': {
         const b = scheduleTask(t, t.due && t.due > todayISO() ? t.due : todayISO());
-        if (b) toast(`Scheduled ${dayLabel(b.date).toLowerCase()} at ${fmtTime(b.start)}`);
+        if (b) toast(`Scheduled ${dayLabelIn(b.date)} at ${fmtTime(b.start)}`);
         break;
       }
       case 'goto': currentDate = btn.dataset.date; state.settings.tbView = 'day'; setMode('timeblock'); break;
@@ -2397,6 +3530,7 @@
 
   function newItem() {
     const m = mode();
+    if (m === 'diary') { openDiaryDialog(); return; }
     if (m === 'todo') {
       if (state.settings.todoView === 'day' && !todoDue.value) todoDue.value = currentDate;
       todoTitle.focus();
@@ -2431,6 +3565,7 @@
   setInterval(() => {
     ticks++;
     if (state.timer?.status === 'running') renderTimerBar();
+    if (ticks % 30 === 15) checkLateChains();
     if (ticks % 30 !== 0) return;
     const t = todayISO();
     if (t !== lastToday) {
@@ -2454,12 +3589,22 @@
       const line = document.createElement('div');
       line.className = 'now-line';
       line.style.top = minToY(m) + 'px';
+      if (colsEl.children.length === 1) line.innerHTML = `<span>${esc(fmtTs(Date.now()))}</span>`;
       col.appendChild(line);
     }
     colsEl.querySelectorAll('.block[data-key]').forEach(n => {
       const o = findOcc(n.dataset.key);
       if (o) n.classList.toggle('now', o.date === today && m >= o.start && m < o.end);
     });
+    // Grow the live tracked lane and refresh the "actual" line on the running block.
+    if (state.timer?.status === 'running' && col) {
+      drawActualLanes(col, today);
+      const tn = colsEl.querySelector('.block.tracking[data-key]');
+      const o = tn && findOcc(tn.dataset.key);
+      const span = o && actualSpan(o.ref, o.date);
+      const el = tn?.querySelector('.block-actual');
+      if (el && span) el.innerHTML = `● ${esc(fmtTs(span.start))} – now · ${deltaLabel(span.start, o.date, o.start, 'start')}`;
+    }
   }
 
   // Keep tabs in sync if the app is open twice.
@@ -2505,6 +3650,11 @@
       renderAll();
     },
     onChange(fn) { changeListeners.add(fn); },
+    // Photo sync hooks (auth.js): fetch(id) -> dataURL, upload(id, dataURL, meta), remove(id).
+    setRemoteMedia(hooks) { Object.assign(remote, hooks || { fetch: null, upload: null, remove: null }); if (mode() === 'diary') renderAll(); },
+    // Photos added while signed out that should be uploaded once signed in.
+    async pendingPhotos() { const out = []; for (const e of state.diary) for (const m of e.media) if (m.sync) out.push(m); return out; },
+    getMediaBlob: id => Media.get(id),
     toast,
   };
 

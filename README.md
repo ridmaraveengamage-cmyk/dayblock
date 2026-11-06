@@ -12,9 +12,20 @@ One codebase that works as a **website** and as an **installable app** (desktop 
 - **Repeats** — blocks and tasks can repeat daily, every weekday, weekly (pick days) or monthly, every N days/weeks/months, with an optional end date.
   - Editing a repeating block asks: *only this one*, *this and following*, or *all*.
   - Ticking off a repeating task creates the next one automatically.
+- **Looks** — Aurora (soft glass), Midnight (dark glow) or Paper (warm ink), each in light or dark. Pick in Settings.
+- **Custom categories** — add, rename, recolor or delete categories in Settings.
 - **Time tracking** — press ▶ on any task or block. Pause for breaks, Resume, and **Stop** when finished (stopping marks it complete).
-- **Insights** — planned vs. tracked time for a day, week or month: totals, a per-day chart, a category breakdown,
-  a per-item table (over/under plan) and a session log.
+  The timer shows when you actually started, the live time and your planned slot; the timeline shows tracked sessions as a slim lane.
+- **Postpone** — move a task or block to tomorrow, the weekend, next week or any date, with a reason. Dragging to a later day counts too.
+  History and a ↷ count show what keeps slipping.
+- **Linked tasks** — “Starts after” links tasks into chains. When one is postponed or runs late, everything after it moves too
+  (ask or automatic, set in Settings). See all chains in To-do → Linked.
+- **Insights** — planned vs. tracked time for a day, week or month: totals, per-day chart, categories, per-item table,
+  start/finish punctuality vs. plan, your real working hours, postponements, and plain-language tips.
+- **Vision** — vision statement, daily affirmation, vision board, wheel of life, life goals with steps, and a daily journal.
+- **Diary** — memories with mood, photos, videos, audio and files. Photos sync to your account (shrunk to < 1 MB);
+  videos and other files stay on the device where you added them (the free Firebase plan has no file storage).
+- **Learn** — a step-by-step guide to the app and 14 practical lessons on time management, focus, goals, habits and wellbeing.
 
 Shortcuts: `N` new · `←` `→` move · `T` today · `D` `W` `M` day / week / month.
 
